@@ -1,0 +1,20 @@
+import { createError, getRouterParam, readBody } from 'h3'
+import { requireAdmin } from '../../../../utils/adminAuth'
+import { prisma } from '../../../../utils/prisma'
+
+export default defineEventHandler(async (event) => {
+  await requireAdmin(event)
+  const id = getRouterParam(event, 'id') || ''
+  const body = await readBody<{ status?: 'PENDING' | 'APPROVED' | 'REJECTED' }>(event)
+  const status = body?.status
+  if (!status || !['PENDING', 'APPROVED', 'REJECTED'].includes(status)) {
+    throw createError({ statusCode: 400, statusMessage: 'Status invalido.' })
+  }
+
+  const npc = await prisma.npc.update({
+    where: { id },
+    data: { moderationStatus: status }
+  })
+
+  return { npc }
+})

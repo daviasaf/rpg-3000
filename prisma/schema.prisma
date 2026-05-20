@@ -1,0 +1,339 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum SystemVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+enum FieldType {
+  TEXT
+  NUMBER
+  BOOLEAN
+  LIST
+  FORMULA
+  DICE
+}
+
+enum FieldCategory {
+  ATTRIBUTE
+  SKILL
+  RESOURCE
+  STATUS_BAR
+  TEXT_FIELD
+  NUMERIC_FIELD
+  BOOLEAN_FIELD
+  LIST_FIELD
+  FORMULA
+  ROLL_RULE
+}
+
+enum RoomRole {
+  MASTER
+  PLAYER
+  SPECTATOR
+}
+
+enum SessionStatus {
+  ACTIVE
+  ENDED
+}
+
+enum MessageType {
+  CHAT
+  SYSTEM
+  ROLL
+  EVENT
+  PRIVATE
+}
+
+enum ModerationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id                  String               @id @default(cuid())
+  name                String
+  email               String               @unique
+  passwordHash        String
+  avatarUrl           String?
+  profileColor        String               @default("#ff8a13")
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  systems             System[]             @relation("SystemCreator")
+  npcs                Npc[]                @relation("NpcCreator")
+  systemLikes         SystemLike[]
+  systemComments      SystemComment[]
+  npcLikes            NpcLike[]
+  npcComments         NpcComment[]
+  characters          Character[]
+  masteredRooms       Room[]               @relation("RoomMaster")
+  roomMembers         RoomMember[]
+  chatMessages        ChatMessage[]
+  diceRolls           DiceRoll[]
+  passwordResetTokens PasswordResetToken[]
+}
+
+model System {
+  id          String           @id @default(cuid())
+  name        String
+  slug        String           @unique
+  description String
+  tags        String[]
+  visibility  SystemVisibility @default(PUBLIC)
+  moderationStatus ModerationStatus @default(PENDING)
+  createdById String?
+  createdBy   User?            @relation("SystemCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  schemaJson  Json
+  fields      SystemField[]
+  npcs        Npc[]
+  likes       SystemLike[]
+  comments    SystemComment[]
+  characters  Character[]
+  rooms       Room[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([visibility])
+  @@index([moderationStatus])
+  @@index([createdById])
+}
+
+model SystemLike {
+  id        String   @id @default(cuid())
+  systemId  String
+  system    System   @relation(fields: [systemId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([systemId, userId])
+  @@index([userId])
+}
+
+model SystemComment {
+  id        String   @id @default(cuid())
+  systemId  String
+  system    System   @relation(fields: [systemId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([systemId, createdAt])
+  @@index([userId])
+}
+
+model Npc {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  avatarUrl   String?
+  isCommunity Boolean   @default(false)
+  moderationStatus ModerationStatus @default(PENDING)
+  systemId    String?
+  system      System?   @relation(fields: [systemId], references: [id], onDelete: SetNull)
+  createdById String?
+  createdBy   User?     @relation("NpcCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  dataJson    Json
+  likes       NpcLike[]
+  comments    NpcComment[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([isCommunity])
+  @@index([moderationStatus])
+  @@index([systemId])
+  @@index([createdById])
+}
+
+model NpcLike {
+  id        String   @id @default(cuid())
+  npcId     String
+  npc       Npc      @relation(fields: [npcId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([npcId, userId])
+  @@index([userId])
+}
+
+model NpcComment {
+  id        String   @id @default(cuid())
+  npcId     String
+  npc       Npc      @relation(fields: [npcId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([npcId, createdAt])
+  @@index([userId])
+}
+
+model SystemField {
+  id           String        @id @default(cuid())
+  systemId     String
+  system       System        @relation(fields: [systemId], references: [id], onDelete: Cascade)
+  key          String
+  label        String
+  type         FieldType
+  category     FieldCategory
+  defaultValue Json?
+  optionsJson  Json?
+  formula      String?
+  order        Int           @default(0)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([systemId, key])
+  @@index([systemId, category])
+}
+
+model Character {
+  id          String                @id @default(cuid())
+  name        String
+  description String?
+  avatarUrl   String?
+  userId      String
+  user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  systemId    String
+  system      System                @relation(fields: [systemId], references: [id], onDelete: Restrict)
+  dataJson    Json
+  values      CharacterFieldValue[]
+  roomMembers RoomMember[]
+  chatMessages ChatMessage[]
+  diceRolls   DiceRoll[]
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  @@index([userId])
+  @@index([systemId])
+}
+
+model CharacterFieldValue {
+  id          String    @id @default(cuid())
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  fieldId     String?
+  key         String
+  valueJson   Json
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([characterId, key])
+  @@index([fieldId])
+}
+
+model Room {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  code        String        @unique
+  isPublic    Boolean       @default(false)
+  systemId    String
+  system      System        @relation(fields: [systemId], references: [id], onDelete: Restrict)
+  masterId    String
+  master      User          @relation("RoomMaster", fields: [masterId], references: [id], onDelete: Cascade)
+  members     RoomMember[]
+  sessions    Session[]
+  messages    ChatMessage[]
+  diceRolls   DiceRoll[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([masterId])
+  @@index([systemId])
+}
+
+model RoomMember {
+  id          String     @id @default(cuid())
+  roomId      String
+  room        Room       @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  characterId String?
+  character   Character? @relation(fields: [characterId], references: [id], onDelete: SetNull)
+  role        RoomRole   @default(PLAYER)
+  joinedAt    DateTime   @default(now())
+
+  @@unique([roomId, userId])
+  @@index([characterId])
+}
+
+model Session {
+  id           String        @id @default(cuid())
+  roomId       String
+  room         Room          @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  status       SessionStatus @default(ACTIVE)
+  startedAt    DateTime      @default(now())
+  endedAt      DateTime?
+  chatMessages ChatMessage[]
+  diceRolls    DiceRoll[]
+
+  @@index([roomId, status])
+}
+
+model ChatMessage {
+  id           String      @id @default(cuid())
+  roomId       String
+  room         Room        @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  sessionId    String?
+  session      Session?    @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  userId       String?
+  user         User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  characterId  String?
+  character    Character?  @relation(fields: [characterId], references: [id], onDelete: SetNull)
+  type         MessageType @default(CHAT)
+  content      String
+  metadataJson Json?
+  createdAt    DateTime    @default(now())
+
+  @@index([roomId, createdAt])
+  @@index([sessionId])
+}
+
+model DiceRoll {
+  id          String    @id @default(cuid())
+  roomId      String
+  room        Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  sessionId   String?
+  session     Session?  @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  characterId String?
+  character   Character? @relation(fields: [characterId], references: [id], onDelete: SetNull)
+  expression  String
+  result      Int
+  rollsJson   Json
+  modifier    Int       @default(0)
+  mode        String    @default("NORMAL")
+  createdAt   DateTime  @default(now())
+
+  @@index([roomId, createdAt])
+  @@index([sessionId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([tokenHash])
+}

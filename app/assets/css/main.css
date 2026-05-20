@@ -1,0 +1,195 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --grid-dot: rgba(139, 92, 246, 0.16);
+}
+
+:root.light-theme {
+  color-scheme: light;
+  --grid-dot: rgba(36, 28, 64, 0.08);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 138, 19, 0.65) rgba(18, 16, 32, 0.8);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 18% 8%, rgba(255, 138, 19, 0.12), transparent 24rem),
+    radial-gradient(circle at 74% 12%, rgba(139, 92, 246, 0.15), transparent 28rem),
+    linear-gradient(135deg, #05050d 0%, #0b0915 48%, #120b1f 100%);
+  color: #f7f3ff;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.light-theme body {
+  background:
+    radial-gradient(circle at 18% 8%, rgba(255, 138, 19, 0.10), transparent 24rem),
+    linear-gradient(135deg, #fbf9ff 0%, #f0edf7 100%);
+  color: #161322;
+}
+
+.light-theme [class*="bg-void"],
+.light-theme [class*="bg-panel"] {
+  background-color: rgba(251, 249, 255, 0.95) !important;
+}
+
+.light-theme aside,
+.light-theme header {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+}
+
+.light-theme .surface,
+.light-theme section.surface {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(18, 16, 32, 0.12);
+  color: #161322;
+}
+
+.light-theme .text-white {
+  color: #161322 !important;
+}
+
+.light-theme .text-mist {
+  color: #625d76 !important;
+}
+
+.light-theme .input {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(18, 16, 32, 0.14);
+  color: #161322;
+}
+
+.light-theme .select {
+  color: #161322;
+}
+
+.light-theme .border-white\/10 {
+  border-color: rgba(18, 16, 32, 0.12) !important;
+}
+
+.light-theme .bg-white\/\[0\.04\],
+.light-theme .bg-white\/\[0\.06\],
+.light-theme .bg-white\/\[0\.07\] {
+  background-color: rgba(18, 16, 32, 0.035) !important;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(var(--grid-dot) 1px, transparent 1px);
+  background-size: 22px 22px;
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.75), transparent 85%);
+}
+
+.app-shell-content {
+  padding-left: 76px;
+  transition: padding-left 300ms ease;
+}
+
+.sidebar-expanded .app-shell-content {
+  padding-left: 220px;
+}
+
+.auth-page-enter-active,
+.auth-page-leave-active {
+  transition: opacity 260ms ease, transform 260ms ease;
+}
+
+.auth-page-enter-from {
+  opacity: 0;
+  transform: translateX(24px);
+}
+
+.auth-page-leave-to {
+  opacity: 0;
+  transform: translateX(-24px);
+}
+
+.auth-panel {
+  animation: auth-panel-in 280ms ease both;
+}
+
+@keyframes auth-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(18, 16, 32, 0.8);
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(#ff8a13, #ff453d);
+  border-radius: 8px;
+  border: 2px solid rgba(18, 16, 32, 0.8);
+}
+
+@layer components {
+  .input {
+    @apply w-full rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-mist/55 focus:border-ember/70 focus:ring-2 focus:ring-ember/20;
+  }
+
+  .label {
+    @apply mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-mist;
+  }
+
+  .select {
+    @apply input appearance-none pr-9;
+    background-image:
+      linear-gradient(45deg, transparent 50%, #a6a2bd 50%),
+      linear-gradient(135deg, #a6a2bd 50%, transparent 50%);
+    background-position:
+      calc(100% - 18px) 50%,
+      calc(100% - 13px) 50%;
+    background-repeat: no-repeat;
+    background-size: 5px 5px;
+  }
+
+  .surface {
+    @apply border border-white/10 bg-panel/95 shadow-[0_6px_14px_rgba(0,0,0,0.14)];
+  }
+
+  .shadow-soft {
+    @apply shadow-[0_10px_24px_rgba(0,0,0,0.28)];
+  }
+
+  .page-title {
+    @apply text-2xl font-black tracking-tight text-white sm:text-3xl;
+  }
+
+  .muted {
+    @apply text-sm text-mist;
+  }
+}
+
+select.select option,
+select.select optgroup {
+  background: #121020;
+  color: #f7f3ff;
+}
+
+.light-theme select.select option,
+.light-theme select.select optgroup {
+  background: #ffffff;
+  color: #161322;
+}
