@@ -33,6 +33,7 @@ export default defineEventHandler(async (event) => {
       data: {
         name: input.name,
         description: input.description,
+        avatarUrl: input.avatarUrl === undefined ? undefined : input.avatarUrl || null,
         tags: input.tags,
         visibility: input.visibility,
         moderationStatus: input.visibility === 'PUBLIC' ? 'PENDING' : input.visibility === 'PRIVATE' ? 'APPROVED' : undefined,

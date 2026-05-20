@@ -16,21 +16,16 @@ const { data } = await useFetch<{ rooms: Array<{
 
 <template>
   <div class="space-y-5">
-    <div class="flex flex-wrap items-end justify-between gap-3">
-      <div>
-        <h1 class="page-title">Minhas salas</h1>
-        <p class="muted mt-1">Campanhas, convites e sessoes ativas.</p>
-      </div>
-      <div class="flex gap-2">
+    <AppPageHeader title="Minhas salas" description="Campanhas, convites e sessoes ativas organizadas como workspaces de mesa.">
+      <template #actions>
         <NuxtLink to="/app/rooms/join"><AppButton variant="ghost"><LogIn class="h-4 w-4" />Entrar por codigo</AppButton></NuxtLink>
         <NuxtLink to="/app/rooms/new"><AppButton><Plus class="h-4 w-4" />Criar sala</AppButton></NuxtLink>
-      </div>
-    </div>
+      </template>
+    </AppPageHeader>
     <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       <RoomCard v-for="room in data?.rooms" :key="room.id" :room="room" />
     </div>
-    <AppCard v-if="!data?.rooms.length">
-      <p class="text-mist">Nenhuma sala ainda.</p>
-    </AppCard>
+    <EmptyState v-if="!data?.rooms.length" :icon="LogIn" title="Nenhuma sala ainda" description="Crie sua primeira mesa ou entre em uma campanha usando o codigo do mestre.">
+    </EmptyState>
   </div>
 </template>

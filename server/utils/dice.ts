@@ -24,40 +24,12 @@ export function parseAndRollDice(expression: string, mode = 'NORMAL'): DiceResul
     throw new Error('Quantidade de dados ou lados fora do limite permitido.')
   }
 
-  if (mode === 'ADVANTAGE' || mode === 'DISADVANTAGE') {
-    const first = rollOnce(count, sides)
-    const second = rollOnce(count, sides)
-    const chosen = mode === 'ADVANTAGE'
-      ? Math.max(first.subtotal, second.subtotal)
-      : Math.min(first.subtotal, second.subtotal)
-
-    return {
-      expression: normalized,
-      result: chosen + modifier,
-      rolls: [first, second],
-      modifier,
-      mode
-    }
-  }
-
   const roll = rollOnce(count, sides)
-  if (count === 2 && sides === 20) {
-    return {
-      expression: normalized,
-      result: Math.max(...roll.values) + modifier,
-      rolls: [roll],
-      modifier,
-      mode: 'ADVANTAGE_EXPRESSION'
-    }
-  }
-
-  const criticalBonus = mode === 'CRITICAL' ? roll.subtotal : 0
-
   return {
     expression: normalized,
-    result: roll.subtotal + criticalBonus + modifier,
+    result: roll.subtotal + modifier,
     rolls: [roll],
     modifier,
-    mode
+    mode: 'NORMAL'
   }
 }

@@ -49,7 +49,7 @@ function addField(category: FieldCategory) {
     label,
     type,
     category,
-    defaultValue: type === 'NUMBER' ? 1 : '',
+    defaultValue: category === 'ATTRIBUTE' ? 0 : type === 'NUMBER' ? 0 : '',
     optionsJson: type === 'LIST' ? ['Opcao A', 'Opcao B'] : undefined,
     order: nextIndex
   })

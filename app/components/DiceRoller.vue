@@ -13,6 +13,8 @@ const expression = ref('1d20')
 const hidden = ref(false)
 const loading = ref(false)
 
+const presets = ['1d20', '1d12', '1d8', '1d6', '1d4']
+
 async function roll() {
   if (!props.roomId) return
   loading.value = true
@@ -36,6 +38,11 @@ async function roll() {
     <h3 class="mb-4 flex items-center gap-2 text-lg font-black text-white"><Dice5 class="h-5 w-5 text-ember" /> Rolagem</h3>
     <div class="space-y-3">
       <input v-model="expression" class="input" placeholder="1d20, 1d12, 2d20+5">
+      <div class="flex flex-wrap gap-2">
+        <button v-for="preset in presets" :key="preset" type="button" class="rounded-md border border-white/10 px-2 py-1 text-xs font-bold text-mist hover:border-ember/40 hover:text-white" @click="expression = preset">
+          {{ preset }}
+        </button>
+      </div>
       <label v-if="isMaster" class="flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-3">
         <input v-model="hidden" type="checkbox" class="h-4 w-4 accent-ember">
         <span class="text-sm font-bold text-white">Esconder rolagem do mestre</span>

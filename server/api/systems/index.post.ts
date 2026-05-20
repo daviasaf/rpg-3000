@@ -32,6 +32,7 @@ export default defineEventHandler(async (event) => {
       name: input.name,
       slug: await createUniqueSlug(input.name),
       description: input.description,
+      avatarUrl: input.avatarUrl || null,
       tags: input.tags,
       visibility: input.visibility,
       moderationStatus: input.visibility === 'PUBLIC' ? 'PENDING' : 'APPROVED',

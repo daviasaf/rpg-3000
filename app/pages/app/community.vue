@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bot, BookOpen, Heart, MessageCircle, MoreHorizontal, PlusCircle } from 'lucide-vue-next'
+import { Bot, BookOpen, ChevronDown, Heart, MessageCircle, MoreHorizontal, PlusCircle } from 'lucide-vue-next'
 
 definePageMeta({ layout: 'app', middleware: 'auth' })
 
@@ -25,6 +25,7 @@ const deleting = ref(false)
 const addingId = ref('')
 const postMenu = ref('')
 const commentMenu = ref('')
+const expandedPosts = ref(new Set<string>())
 
 const [{ data: systems, refresh: refreshSystems }, { data: npcs, refresh: refreshNpcs }] = await Promise.all([
   useFetch<{ systems: Array<{
@@ -196,6 +197,22 @@ function wasEdited(comment: CommentItem) {
 function commentMenuKey(kind: 'system' | 'npc', id: string) {
   return `${kind}:${id}`
 }
+
+function postKey(kind: 'system' | 'npc', id: string) {
+  return `${kind}:${id}`
+}
+
+function isExpanded(kind: 'system' | 'npc', id: string) {
+  return expandedPosts.value.has(postKey(kind, id))
+}
+
+function togglePost(kind: 'system' | 'npc', id: string) {
+  const key = postKey(kind, id)
+  const next = new Set(expandedPosts.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  expandedPosts.value = next
+}
 </script>
 
 <template>
@@ -224,14 +241,14 @@ function commentMenuKey(kind: 'system' | 'npc', id: string) {
 
     <section v-if="filter !== 'NPC'" class="space-y-4">
       <h2 class="flex items-center gap-2 text-xl font-black text-white"><BookOpen class="h-5 w-5 text-ember" />Sistemas</h2>
-      <AppCard v-for="system in visibleSystems" :id="`post-${system.id}`" :key="system.id">
+      <AppCard v-for="system in visibleSystems" :id="`post-${system.id}`" :key="system.id" class="transition hover:border-ember/30">
         <div class="flex flex-wrap items-start justify-between gap-3">
-          <div>
+          <button type="button" class="min-w-0 flex-1 text-left" @click="togglePost('system', system.id)">
             <p class="text-xs font-black uppercase tracking-[0.14em] text-ember">Sistema</p>
-            <NuxtLink :to="`/app/systems/${system.id}`" class="mt-1 block text-xl font-black text-white hover:text-ember">{{ system.name }}</NuxtLink>
-            <p class="mt-2 max-w-3xl text-sm leading-6 text-mist">{{ system.description }}</p>
+            <span class="mt-1 block text-xl font-black text-white hover:text-ember">{{ system.name }}</span>
+            <p class="mt-2 line-clamp-2 max-w-3xl text-sm leading-6 text-mist">{{ system.description }}</p>
             <p class="mt-2 text-xs text-mist">por {{ system.createdBy?.name || 'Central RPG' }}</p>
-          </div>
+          </button>
           <div class="flex flex-wrap items-start gap-2">
             <NuxtLink :to="`/app/systems/${system.id}`"><AppButton variant="ghost">Ver completo</AppButton></NuxtLink>
             <AppButton v-if="system.createdById !== auth.user?.id" variant="ghost" :loading="addingId === `system:${system.id}`" @click="addSystemToInventory(system.id)">
@@ -246,6 +263,9 @@ function commentMenuKey(kind: 'system' | 'npc', id: string) {
                 <button type="button" class="block w-full rounded-md px-3 py-2 text-left text-sm font-bold text-red-100 hover:bg-flare/15" @click="deleteTarget = { type: 'system', id: system.id, name: system.name }; postMenu = ''">Apagar</button>
               </div>
             </div>
+            <button type="button" class="grid h-10 w-10 place-items-center rounded-lg border border-white/10 text-ember transition hover:bg-white/10" :title="isExpanded('system', system.id) ? 'Minimizar' : 'Expandir'" @click="togglePost('system', system.id)">
+              <ChevronDown class="h-6 w-6 transition" :class="isExpanded('system', system.id) ? 'rotate-180' : ''" />
+            </button>
           </div>
         </div>
         <div class="mt-4 flex flex-wrap gap-2">
@@ -256,16 +276,14 @@ function commentMenuKey(kind: 'system' | 'npc', id: string) {
             <MessageCircle class="h-4 w-4" />{{ system._count?.comments || 0 }}
           </span>
         </div>
-        <form class="mt-4 flex gap-2" @submit.prevent="commentSystem(system.id)">
-          <input v-model="systemComment[system.id]" class="input" placeholder="Comentar...">
-          <AppButton type="submit">Enviar</AppButton>
-        </form>
-        <div class="mt-3 space-y-2">
+        <div v-if="isExpanded('system', system.id)">
+          <form class="mt-4 flex gap-2" @submit.prevent="commentSystem(system.id)">
+            <input v-model="systemComment[system.id]" class="input" placeholder="Comentar...">
+            <AppButton type="submit">Enviar</AppButton>
+          </form>
+        <div class="mt-3 space-y-2" :class="(system.comments?.length || 0) > 5 ? 'max-h-80 overflow-y-auto pr-2' : ''">
           <div v-for="item in system.comments" :key="item.id" class="relative flex gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-3 pr-12 text-sm text-mist">
-            <div class="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full border font-black text-white" :style="{ backgroundColor: `${userColor(item.user)}33`, borderColor: `${userColor(item.user)}66` }">
-              <img v-if="item.user?.avatarUrl" :src="item.user.avatarUrl" :alt="item.user.name" class="h-full w-full object-cover">
-              <span v-else>{{ avatarLabel(item.user?.name) }}</span>
-            </div>
+            <AppAvatar :name="item.user?.name" :src="item.user?.avatarUrl" :color="userColor(item.user)" rounded="full" size="sm" />
             <div class="min-w-0 flex-1">
               <p><b class="text-white">{{ item.user?.name || 'Jogador' }}</b> <span class="text-xs">{{ new Date(item.createdAt).toLocaleString('pt-BR') }}{{ wasEdited(item) ? ' | editado' : '' }}</span></p>
               <textarea v-if="editingComment?.id === item.id" v-model="editingComment.content" rows="2" class="input mt-2" />
@@ -285,17 +303,20 @@ function commentMenuKey(kind: 'system' | 'npc', id: string) {
             </div>
           </div>
         </div>
+        </div>
       </AppCard>
     </section>
 
     <section v-if="filter !== 'SYSTEM'" class="space-y-4">
       <h2 class="flex items-center gap-2 text-xl font-black text-white"><Bot class="h-5 w-5 text-ember" />NPCs</h2>
-      <AppCard v-for="npc in visibleNpcs" :id="`post-${npc.id}`" :key="npc.id">
+      <AppCard v-for="npc in visibleNpcs" :id="`post-${npc.id}`" :key="npc.id" class="transition hover:border-ember/30">
         <div class="flex flex-wrap items-start justify-between gap-3">
-          <div>
+          <button type="button" class="min-w-0 flex-1 text-left" @click="togglePost('npc', npc.id)">
             <p class="text-xs font-black uppercase tracking-[0.14em] text-ember">NPC</p>
-            <NuxtLink :to="`/app/npcs/${npc.id}`" class="mt-1 block text-xl font-black text-white hover:text-ember">{{ npc.name }}</NuxtLink>
-          </div>
+            <span class="mt-1 block text-xl font-black text-white hover:text-ember">{{ npc.name }}</span>
+            <p class="mt-2 line-clamp-2 max-w-3xl text-sm leading-6 text-mist">{{ npc.description || 'Sem descricao.' }}</p>
+            <p class="mt-2 text-xs text-mist">{{ npc.system?.name || 'Generico' }} | por {{ npc.createdBy?.name || 'Jogador' }}</p>
+          </button>
           <div class="flex flex-wrap items-start gap-2">
             <NuxtLink :to="`/app/npcs/${npc.id}`"><AppButton variant="ghost">Ver completo</AppButton></NuxtLink>
             <AppButton v-if="npc.createdById !== auth.user?.id" variant="ghost" :loading="addingId === `npc:${npc.id}`" @click="addNpcToInventory(npc.id)">
@@ -310,11 +331,12 @@ function commentMenuKey(kind: 'system' | 'npc', id: string) {
                 <button type="button" class="block w-full rounded-md px-3 py-2 text-left text-sm font-bold text-red-100 hover:bg-flare/15" @click="deleteTarget = { type: 'npc', id: npc.id, name: npc.name }; postMenu = ''">Apagar</button>
               </div>
             </div>
+            <button type="button" class="grid h-10 w-10 place-items-center rounded-lg border border-white/10 text-ember transition hover:bg-white/10" :title="isExpanded('npc', npc.id) ? 'Minimizar' : 'Expandir'" @click="togglePost('npc', npc.id)">
+              <ChevronDown class="h-6 w-6 transition" :class="isExpanded('npc', npc.id) ? 'rotate-180' : ''" />
+            </button>
           </div>
         </div>
-        <p class="mt-2 max-w-3xl text-sm leading-6 text-mist">{{ npc.description || 'Sem descricao.' }}</p>
-        <p class="mt-2 text-xs text-mist">{{ npc.system?.name || 'Generico' }} | por {{ npc.createdBy?.name || 'Jogador' }}</p>
-        <div v-if="Array.isArray(npc.dataJson.attacks)" class="mt-3 flex flex-wrap gap-2">
+        <div v-if="isExpanded('npc', npc.id) && Array.isArray(npc.dataJson.attacks)" class="mt-3 flex flex-wrap gap-2">
           <span v-for="attack in npc.dataJson.attacks" :key="String((attack as Record<string, unknown>).name)" class="rounded-md border border-ember/25 bg-ember/10 px-2 py-1 text-xs font-bold text-ember">
             {{ (attack as Record<string, unknown>).name }}: {{ (attack as Record<string, unknown>).damage }}
           </span>
@@ -327,16 +349,14 @@ function commentMenuKey(kind: 'system' | 'npc', id: string) {
             <MessageCircle class="h-4 w-4" />{{ npc._count?.comments || 0 }}
           </span>
         </div>
+        <div v-if="isExpanded('npc', npc.id)">
         <form class="mt-4 flex gap-2" @submit.prevent="commentNpc(npc.id)">
-          <input v-model="npcComment[npc.id]" class="input" placeholder="Comentar...">
-          <AppButton type="submit">Enviar</AppButton>
-        </form>
-        <div class="mt-3 space-y-2">
+            <input v-model="npcComment[npc.id]" class="input" placeholder="Comentar...">
+            <AppButton type="submit">Enviar</AppButton>
+          </form>
+        <div class="mt-3 space-y-2" :class="(npc.comments?.length || 0) > 5 ? 'max-h-80 overflow-y-auto pr-2' : ''">
           <div v-for="item in npc.comments" :key="item.id" class="relative flex gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-3 pr-12 text-sm text-mist">
-            <div class="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full border font-black text-white" :style="{ backgroundColor: `${userColor(item.user)}33`, borderColor: `${userColor(item.user)}66` }">
-              <img v-if="item.user?.avatarUrl" :src="item.user.avatarUrl" :alt="item.user.name" class="h-full w-full object-cover">
-              <span v-else>{{ avatarLabel(item.user?.name) }}</span>
-            </div>
+            <AppAvatar :name="item.user?.name" :src="item.user?.avatarUrl" :color="userColor(item.user)" rounded="full" size="sm" />
             <div class="min-w-0 flex-1">
               <p><b class="text-white">{{ item.user?.name || 'Jogador' }}</b> <span class="text-xs">{{ new Date(item.createdAt).toLocaleString('pt-BR') }}{{ wasEdited(item) ? ' | editado' : '' }}</span></p>
               <textarea v-if="editingComment?.id === item.id" v-model="editingComment.content" rows="2" class="input mt-2" />
@@ -355,6 +375,7 @@ function commentMenuKey(kind: 'system' | 'npc', id: string) {
               </div>
             </div>
           </div>
+        </div>
         </div>
       </AppCard>
     </section>

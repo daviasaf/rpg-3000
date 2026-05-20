@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Save } from 'lucide-vue-next'
+import { ChevronDown, Save } from 'lucide-vue-next'
 import type { DynamicField, SystemSchema } from '../../shared/types/system'
 
 const props = defineProps<{
@@ -20,6 +20,7 @@ const emit = defineEmits<{ saved: [] }>()
 const { push, apiError } = useToast()
 const draft = reactive<Record<string, unknown>>({ ...props.character.dataJson })
 const saving = ref(false)
+const openGroups = ref(new Set<string>())
 const savedAt = ref<Date | null>(null)
 const autosaveReady = ref(false)
 const syncing = ref(false)
@@ -54,6 +55,17 @@ function categoryLabel(category: string) {
     STATUS_BAR: 'Estado'
   }
   return labels[category] || category
+}
+
+function isGroupOpen(category: string) {
+  return openGroups.value.has(category)
+}
+
+function toggleGroup(category: string) {
+  const next = new Set(openGroups.value)
+  if (next.has(category)) next.delete(category)
+  else next.add(category)
+  openGroups.value = next
 }
 
 async function save(silent = false) {
@@ -106,7 +118,7 @@ onBeforeUnmount(() => {
     <AppCard>
       <div class="aspect-square overflow-hidden rounded-lg border border-white/10 bg-gradient-to-br from-ember/20 to-arcane/20">
         <img v-if="character.avatarUrl" :src="character.avatarUrl" :alt="character.name" class="h-full w-full object-cover">
-        <div v-else class="grid h-full place-items-center text-7xl font-black text-ember">{{ character.name.slice(0, 1).toUpperCase() }}</div>
+        <AppAvatar v-else :name="character.name" size="xl" />
       </div>
       <span class="mt-4 inline-flex rounded-md border border-ember/25 bg-ember/10 px-2 py-0.5 text-[11px] font-bold text-ember">{{ character.system.name }}</span>
       <h1 class="mt-2 text-3xl font-black text-white">{{ character.name }}</h1>
@@ -120,8 +132,11 @@ onBeforeUnmount(() => {
 
     <div class="space-y-5">
       <AppCard v-for="group in groups" :key="group.category">
-        <h2 class="mb-4 text-lg font-black text-white">{{ categoryLabel(group.category) }}</h2>
-        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <button type="button" class="flex w-full items-center justify-between gap-3 text-left" @click="toggleGroup(group.category)">
+          <h2 class="text-lg font-black text-white">{{ categoryLabel(group.category) }}</h2>
+          <ChevronDown class="h-5 w-5 text-ember transition" :class="isGroupOpen(group.category) ? 'rotate-180' : ''" />
+        </button>
+        <div v-if="isGroupOpen(group.category)" class="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <div v-for="field in group.fields" :key="field.key" class="relative" :class="field.type === 'TEXT' ? 'md:col-span-2 xl:col-span-3' : ''">
             <DynamicFieldRenderer v-model="draft[field.key]" :field="field" :readonly="!editable" />
           </div>

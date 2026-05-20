@@ -1,5 +1,5 @@
 <template>
-  <section class="surface rounded-xl p-4">
+  <section class="surface rounded-lg p-4">
     <slot />
   </section>
 </template>

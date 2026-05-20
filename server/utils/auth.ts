@@ -9,6 +9,7 @@ const cookieName = 'central_rpg_session'
 export interface AuthUser {
   id: string
   name: string
+  username: string | null
   email: string
   avatarUrl: string | null
   profileColor: string
@@ -58,7 +59,7 @@ export async function getAuthUser(event: H3Event): Promise<AuthUser | null> {
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, name: true, email: true, avatarUrl: true, profileColor: true }
+      select: { id: true, name: true, username: true, email: true, avatarUrl: true, profileColor: true }
     })
 
     return user

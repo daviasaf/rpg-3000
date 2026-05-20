@@ -1,20 +1,37 @@
 <script setup lang="ts">
-import { LogOut, Shield, UserRound } from 'lucide-vue-next'
+import { LogOut, Save, Shield, UserRound } from 'lucide-vue-next'
 
 definePageMeta({ layout: 'app', middleware: 'auth' })
 
+const route = useRoute()
 const auth = useAuthStore()
 const { push, apiError } = useToast()
 const theme = ref('dark')
-const displayName = ref('')
-const accent = ref('#ff8a13')
+const profile = reactive({
+  name: '',
+  username: '',
+  email: '',
+  avatarUrl: '',
+  profileColor: '#ff8a13',
+  currentPassword: '',
+  newPassword: ''
+})
 const saving = ref(false)
+const verificationUrl = ref('')
+const errors = ref<string[]>([])
 
 onMounted(() => {
   theme.value = localStorage.getItem('central-rpg:theme') || 'dark'
-  displayName.value = auth.user?.name || ''
-  accent.value = auth.user?.profileColor || localStorage.getItem('central-rpg:accent') || '#ff8a13'
-  document.documentElement.style.setProperty('--user-accent', accent.value)
+  profile.name = auth.user?.name || ''
+  profile.username = auth.user?.username || auth.user?.email?.split('@')[0] || ''
+  profile.email = auth.user?.email || ''
+  profile.avatarUrl = auth.user?.avatarUrl || ''
+  profile.profileColor = auth.user?.profileColor || localStorage.getItem('central-rpg:accent') || '#ff8a13'
+  document.documentElement.style.setProperty('--user-accent', profile.profileColor)
+  if (route.query.verified === '1') {
+    push('Alteracao confirmada por email.', 'success')
+    void auth.fetchMe()
+  }
 })
 
 watch(theme, (next) => {
@@ -23,23 +40,50 @@ watch(theme, (next) => {
   document.documentElement.classList.toggle('light-theme', next === 'light')
 })
 
-watch(accent, (next) => {
+watch(() => profile.profileColor, (next) => {
   if (!import.meta.client) return
   localStorage.setItem('central-rpg:accent', next)
   document.documentElement.style.setProperty('--user-accent', next)
 })
 
+function validate() {
+  const next: string[] = []
+  if (profile.name.trim().length < 2) next.push('Nome exibido precisa ter pelo menos 2 caracteres.')
+  if (!/^[a-zA-Z0-9_.-]{2,32}$/.test(profile.username.trim())) next.push('Nome de usuario deve ter 2 a 32 caracteres e usar apenas letras, numeros, ponto, hifen ou underline.')
+  if (!profile.email.includes('@')) next.push('Informe um email valido.')
+  if (profile.avatarUrl && !profile.avatarUrl.startsWith('http')) next.push('A foto de perfil precisa ser uma URL valida.')
+  if (profile.newPassword && profile.newPassword.length < 8) next.push('A nova senha precisa ter pelo menos 8 caracteres.')
+  if (profile.newPassword && !profile.currentPassword) next.push('Informe a senha atual para trocar a senha.')
+  errors.value = next
+  return next.length === 0
+}
+
 async function saveProfile() {
+  verificationUrl.value = ''
+  if (!validate()) {
+    push('Corrija os campos antes de salvar.', 'error')
+    return
+  }
+
   saving.value = true
   try {
-    const response = await $fetch<{ user: NonNullable<typeof auth.user> }>('/api/auth/profile', {
+    const response = await $fetch<{ user: NonNullable<typeof auth.user>; pendingVerification?: boolean; verificationUrl?: string }>('/api/auth/profile', {
       method: 'PUT',
-      body: { name: displayName.value, profileColor: accent.value }
+      body: {
+        name: profile.name,
+        username: profile.username,
+        email: profile.email,
+        avatarUrl: profile.avatarUrl,
+        profileColor: profile.profileColor,
+        currentPassword: profile.currentPassword || undefined,
+        newPassword: profile.newPassword || undefined
+      }
     })
     auth.setUser(response.user)
-    localStorage.setItem('central-rpg:accent', response.user.profileColor)
-    document.documentElement.style.setProperty('--user-accent', response.user.profileColor)
-    push('Perfil atualizado.', 'success')
+    profile.currentPassword = ''
+    profile.newPassword = ''
+    verificationUrl.value = response.verificationUrl || ''
+    push(response.pendingVerification ? 'Enviamos um email para confirmar as alteracoes sensiveis.' : 'Perfil atualizado.', 'success')
   } catch (error) {
     apiError(error, 'Nao foi possivel salvar o perfil.')
   } finally {
@@ -50,20 +94,15 @@ async function saveProfile() {
 
 <template>
   <div class="space-y-5">
-    <div>
-      <h1 class="page-title">Configuracoes</h1>
-      <p class="mt-2 text-mist">Perfil, seguranca e preferencias da sua conta.</p>
-    </div>
+    <AppPageHeader title="Configuracoes" description="Perfil, seguranca e preferencias da sua conta." />
 
     <AppCard>
       <div class="flex flex-wrap items-center justify-between gap-4">
         <div class="flex items-center gap-3">
-          <div class="grid h-12 w-12 place-items-center rounded-lg border border-white/10 bg-white/[0.06] text-ember">
-            <UserRound class="h-5 w-5" />
-          </div>
+          <AppAvatar :name="auth.user?.name" :src="auth.user?.avatarUrl" :color="auth.user?.profileColor" size="lg" />
           <div>
             <h2 class="text-lg font-black text-white">{{ auth.user?.name }}</h2>
-            <p class="text-sm text-mist">{{ auth.user?.email }}</p>
+            <p class="text-sm text-mist">@{{ auth.user?.username }} · {{ auth.user?.email }}</p>
           </div>
         </div>
         <AppButton variant="danger" @click="auth.logout">
@@ -73,12 +112,32 @@ async function saveProfile() {
       </div>
     </AppCard>
 
+    <AppCard v-if="errors.length" class="border-flare/40 bg-flare/10">
+      <h2 class="text-lg font-black text-white">Antes de salvar:</h2>
+      <ul class="mt-3 space-y-2 text-sm text-red-100">
+        <li v-for="error in errors" :key="error">{{ error }}</li>
+      </ul>
+    </AppCard>
+
     <AppCard>
-      <h2 class="text-lg font-black text-white">Personalizacao</h2>
-      <div class="mt-4 grid gap-4 md:grid-cols-3">
+      <h2 class="text-lg font-black text-white">Perfil</h2>
+      <p class="mt-1 text-sm text-mist">Nome exibido, nome de usuario e email sao unicos. Alteracoes sensiveis precisam de confirmacao por email.</p>
+      <div class="mt-4 grid gap-4 md:grid-cols-2">
         <label>
-          <span class="label">Nome exibido</span>
-          <input v-model="displayName" class="input" type="text">
+          <span class="label">Nome exibido *</span>
+          <input v-model="profile.name" class="input" type="text">
+        </label>
+        <label>
+          <span class="label">Nome de usuario *</span>
+          <input v-model="profile.username" class="input" type="text" placeholder="davi.asaf">
+        </label>
+        <label>
+          <span class="label">E-mail/Gmail *</span>
+          <input v-model="profile.email" class="input" type="email">
+        </label>
+        <label>
+          <span class="label">Foto de perfil</span>
+          <input v-model="profile.avatarUrl" class="input" type="url" placeholder="https://...">
         </label>
         <label>
           <span class="label">Tema</span>
@@ -89,20 +148,40 @@ async function saveProfile() {
         </label>
         <label>
           <span class="label">Cor de destaque</span>
-          <input v-model="accent" class="input h-[42px]" type="color">
+          <input v-model="profile.profileColor" class="input h-10" type="color">
         </label>
       </div>
-      <AppButton class="mt-4" :loading="saving" @click="saveProfile">Salvar perfil</AppButton>
     </AppCard>
 
     <AppCard>
       <div class="flex items-start gap-3">
         <Shield class="mt-1 h-5 w-5 text-ember" />
-        <div>
+        <div class="flex-1">
           <h2 class="text-lg font-black text-white">Seguranca</h2>
-          <p class="mt-1 text-sm text-mist">Sua sessao usa cookie HTTP-only. A recuperacao de senha usa token temporario e envio por Gmail quando configurado.</p>
+          <p class="mt-1 text-sm text-mist">Para trocar a senha, confirme a senha atual. A alteracao so e aplicada depois da verificacao por email.</p>
+          <div class="mt-4 grid gap-4 md:grid-cols-2">
+            <label>
+              <span class="label">Senha atual</span>
+              <input v-model="profile.currentPassword" class="input" type="password" autocomplete="current-password">
+            </label>
+            <label>
+              <span class="label">Nova senha</span>
+              <input v-model="profile.newPassword" class="input" type="password" autocomplete="new-password">
+            </label>
+          </div>
         </div>
       </div>
     </AppCard>
+
+    <AppCard v-if="verificationUrl" class="border-ember/30 bg-ember/10">
+      <h2 class="text-lg font-black text-white">Ambiente local</h2>
+      <p class="mt-1 text-sm text-mist">Gmail nao configurado ou ambiente local: use este link para confirmar a alteracao.</p>
+      <NuxtLink :to="verificationUrl" external class="mt-3 block break-all text-sm font-bold text-ember">{{ verificationUrl }}</NuxtLink>
+    </AppCard>
+
+    <AppButton :loading="saving" @click="saveProfile">
+      <Save class="h-4 w-4" />
+      Salvar configuracoes
+    </AppButton>
   </div>
 </template>

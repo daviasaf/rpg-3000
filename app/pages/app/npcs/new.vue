@@ -9,6 +9,7 @@ const { data: systems } = await useFetch<{ systems: Array<{ id: string; name: st
 const form = reactive({
   name: '',
   description: '',
+  avatarUrl: '',
   systemId: '',
   isCommunity: false,
   vida: 10,
@@ -33,6 +34,7 @@ async function createNpc() {
       body: {
         name: form.name,
         description: form.description,
+        avatarUrl: form.avatarUrl,
         systemId: form.systemId || null,
         isCommunity: form.isCommunity,
         dataJson: { vida: form.vida, ataque: form.ataque, attacks: form.attacks.filter((attack) => attack.name.trim()) }
@@ -62,11 +64,12 @@ async function createNpc() {
 
     <AppCard>
       <form class="grid gap-4 md:grid-cols-2 xl:grid-cols-4" @submit.prevent="createNpc">
-        <label><span class="label">Nome</span><input v-model="form.name" class="input" type="text"></label>
-        <label><span class="label">Sistema</span><select v-model="form.systemId" class="select"><option value="">Generico</option><option v-for="system in systems?.systems" :key="system.id" :value="system.id">{{ system.name }}</option></select></label>
-        <label><span class="label">Vida</span><input v-model.number="form.vida" class="input" type="number"></label>
-        <label><span class="label">Ataque</span><input v-model.number="form.ataque" class="input" type="number"></label>
-        <label class="md:col-span-2 xl:col-span-3"><span class="label">Descricao</span><input v-model="form.description" class="input" type="text"></label>
+        <label><span class="label">Nome *</span><input v-model="form.name" class="input" type="text"></label>
+        <label><span class="label">Sistema</span><select v-model="form.systemId" class="select"><option value="">{{ systems?.systems.length ? 'Generico' : 'Nenhum sistema criado ainda' }}</option><option v-for="system in systems?.systems" :key="system.id" :value="system.id">{{ system.name }}</option></select></label>
+        <label><span class="label">Vida *</span><input v-model.number="form.vida" class="input" type="number"></label>
+        <label><span class="label">Ataque *</span><input v-model.number="form.ataque" class="input" type="number"></label>
+        <label class="md:col-span-2"><span class="label">Avatar por URL</span><input v-model="form.avatarUrl" class="input" type="url" placeholder="https://..."></label>
+        <label class="md:col-span-2"><span class="label">Descricao</span><input v-model="form.description" class="input" type="text"></label>
         <label class="flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-3"><input v-model="form.isCommunity" type="checkbox" class="h-4 w-4 accent-ember"><span class="font-bold text-white">Publicar na comunidade</span></label>
         <div class="md:col-span-2 xl:col-span-4">
           <div class="mb-2 flex items-center justify-between gap-3">

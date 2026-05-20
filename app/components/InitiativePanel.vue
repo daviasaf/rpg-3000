@@ -433,12 +433,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <AppCard class="flex h-[250px] flex-col">
+  <AppCard class="flex h-[360px] flex-col">
     <div class="flex items-center justify-between gap-3">
       <h3 class="text-lg font-black uppercase text-white">Iniciativa</h3>
       <AppButton v-if="isMaster" variant="ghost" type="button" @click="open = true"><Plus class="h-4 w-4" />Evento</AppButton>
     </div>
-    <ol class="mt-4 min-h-[120px] flex-1 space-y-2 overflow-y-auto pr-2">
+    <ol class="mt-4 min-h-[190px] flex-1 space-y-2 overflow-y-auto pr-2">
       <li
         v-for="actor in orderedActors"
         :key="actor.id"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Crown, Eye, MessageCircle, MoreHorizontal, Settings, X } from 'lucide-vue-next'
+import { Crown, Eye, MessageCircle, MoreHorizontal, Play, Radio, Settings, Square, Users, X } from 'lucide-vue-next'
 import type { SystemSchema } from '../../../../shared/types/system'
 
 definePageMeta({ layout: 'app', middleware: 'auth' })
@@ -9,6 +9,7 @@ const auth = useAuthStore()
 const chat = ref<{ load: () => Promise<void> } | null>(null)
 const { push, apiError } = useToast()
 const deleting = ref(false)
+const sessionLoading = ref(false)
 const settingsOpen = ref(false)
 const confirmDeleteOpen = ref(false)
 const { data, refresh, error } = await useFetch<{ room: {
@@ -42,6 +43,12 @@ watch(error, async (next) => {
 const isMaster = computed(() => data.value?.room.masterId === auth.user?.id)
 const myCharacter = computed(() => data.value?.room.members.find((member) => member.user?.id === auth.user?.id)?.character)
 const primaryResource = computed(() => data.value?.room.system.schemaJson?.primaryResource || 'vida')
+const activeSession = computed(() => data.value?.room.sessions.find((session) => session.status === 'ACTIVE') || null)
+const sessionLabel = computed(() => {
+  if (activeSession.value) return 'Sessao ativa'
+  if (data.value?.room.members.length) return 'Aguardando inicio'
+  return 'Aguardando jogadores'
+})
 const selectedDmUserId = ref<string | null>(null)
 const memberMenuId = ref<string | null>(null)
 const viewingMemberId = ref<string | null>(null)
@@ -168,6 +175,34 @@ async function deleteRoom() {
   }
 }
 
+async function startSession() {
+  if (!data.value?.room.id) return
+  sessionLoading.value = true
+  try {
+    await $fetch(`/api/rooms/${data.value.room.id}/session/start`, { method: 'POST' })
+    push('Sessao iniciada.', 'success')
+    await reloadTable()
+  } catch (error) {
+    apiError(error, 'Nao foi possivel iniciar a sessao.')
+  } finally {
+    sessionLoading.value = false
+  }
+}
+
+async function endSession() {
+  if (!data.value?.room.id) return
+  sessionLoading.value = true
+  try {
+    await $fetch(`/api/rooms/${data.value.room.id}/session/end`, { method: 'POST' })
+    push('Sessao encerrada.', 'success')
+    await reloadTable()
+  } catch (error) {
+    apiError(error, 'Nao foi possivel encerrar a sessao.')
+  } finally {
+    sessionLoading.value = false
+  }
+}
+
 onMounted(() => {
   userAccent.value = auth.user?.profileColor || localStorage.getItem('central-rpg:accent') || '#ff8a13'
   setPresence(true)
@@ -189,19 +224,25 @@ onBeforeUnmount(() => {
 
 <template>
   <div v-if="data?.room" class="space-y-5">
-    <AppCard>
+    <section class="surface rounded-lg p-5">
       <div class="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <span class="rounded-md border border-ember/25 bg-ember/10 px-2 py-1 text-xs font-bold text-ember">{{ data.room.system.name }}</span>
-          <h1 class="mt-3 page-title">{{ data.room.name }}</h1>
-          <p class="mt-2 text-mist">{{ data.room.description }}</p>
-          <p class="mt-2 text-sm text-mist">Codigo: <b class="text-white">{{ data.room.code }}</b></p>
-        </div>
-        <div v-if="isMaster" class="flex flex-wrap gap-2">
-          <div class="rounded-lg border border-ember/25 bg-ember/10 px-3 py-2 text-sm font-bold text-ember">
-            Mestre da mesa
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="kbd-chip">{{ data.room.system.name }}</span>
+            <span class="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-bold" :class="activeSession ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-200' : 'border-white/10 bg-white/[0.04] text-mist'">
+              <Radio class="h-3.5 w-3.5" />
+              {{ sessionLabel }}
+            </span>
+            <span class="kbd-chip">Codigo {{ data.room.code }}</span>
           </div>
-          <div class="relative">
+          <h1 class="mt-3 page-title">{{ data.room.name }}</h1>
+          <p class="mt-2 max-w-3xl text-sm leading-6 text-mist">{{ data.room.description || 'Sala pronta para narrativa, rolagens, fichas e historico da mesa.' }}</p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <AppButton v-if="isMaster && !activeSession" :loading="sessionLoading" @click="startSession"><Play class="h-4 w-4" />Iniciar sessao</AppButton>
+          <AppButton v-if="isMaster && activeSession" variant="ghost" :loading="sessionLoading" @click="endSession"><Square class="h-4 w-4" />Encerrar</AppButton>
+          <div v-if="isMaster" class="relative">
             <button type="button" class="grid h-10 w-10 place-items-center rounded-lg border border-white/10 bg-white/[0.06] text-mist hover:text-white" @click="settingsOpen = !settingsOpen">
               <Settings class="h-5 w-5" />
             </button>
@@ -211,64 +252,65 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </div>
-    </AppCard>
-
-    <section class="space-y-3">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <h2 class="text-sm font-black uppercase tracking-[0.12em] text-mist">Jogadores na sala</h2>
-      </div>
-      <div class="flex gap-3 overflow-x-auto pb-1">
-      <div
-        v-for="member in sortedMembers"
-        :key="member.id"
-        class="surface relative min-w-[285px] rounded-xl border-l-4 p-5 text-left transition hover:-translate-y-0.5 hover:border-ember/45"
-        :style="{ borderLeftColor: memberColor(member.user?.id) }"
-        :class="{ 'opacity-55 grayscale': !isOnline(member), 'border-flare/70 bg-flare/10': isDead(member) }"
-        @click="openDm(member)"
-      >
-        <div class="flex items-center gap-4 pr-8">
-          <div class="relative grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-lg font-black text-white" :style="{ backgroundColor: `${memberColor(member.user?.id)}33` }">
-            <img v-if="member.character?.avatarUrl" :src="member.character.avatarUrl" class="h-full w-full object-cover" :alt="member.character.name">
-            <span v-else>{{ (member.character?.name || member.user?.name || '?').slice(0, 1) }}</span>
-            <span v-if="isDead(member)" class="absolute bottom-1 right-1 rounded bg-flare px-1.5 py-0.5 text-[10px] font-black text-white">0</span>
-          </div>
-          <div class="min-w-0">
-            <p class="flex items-center gap-1 break-words font-black text-white"><Crown v-if="member.role === 'MASTER'" class="h-4 w-4 shrink-0 text-ember" />{{ member.character?.name || member.user?.name }}</p>
-            <p v-if="canSeeMemberSheet(member) && !isDead(member)" class="text-sm text-mist">{{ primaryResource }}: {{ member.character?.dataJson?.[primaryResource] ?? '-' }}</p>
-            <p v-else-if="isDead(member)" class="text-sm text-red-100">Fora de combate</p>
-            <p v-else class="text-sm text-mist">{{ isOnline(member) ? 'Online' : 'Offline' }}</p>
-            <p class="mt-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-xs font-bold text-mist">
-              <span class="h-2 w-2 rounded-full" :class="isOnline(member) ? 'bg-emerald-400' : 'bg-mist/50'" />
-              <span>{{ isOnline(member) ? 'Online' : 'Offline' }}</span>
-              <span v-if="member.user?.id && unreadByUserId[member.user.id]" class="grid h-5 min-w-5 place-items-center rounded-full bg-ember px-1.5 text-[10px] text-black">{{ unreadByUserId[member.user.id] }}</span>
-            </p>
-          </div>
-        </div>
-        <button
-          v-if="canOpenDm(member) || canViewSheet(member)"
-          type="button"
-          class="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-lg text-mist hover:bg-white/10 hover:text-white"
-          title="Opcoes do jogador"
-          @click.stop="memberMenuId = memberMenuId === member.id ? null : member.id"
-        >
-          <MoreHorizontal class="h-5 w-5" />
-        </button>
-        <div v-if="memberMenuId === member.id" class="absolute right-3 top-12 z-20 w-44 rounded-lg border border-white/10 bg-panel p-1 shadow-soft" @click.stop>
-          <button v-if="canOpenDm(member)" type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-bold text-white hover:bg-white/10" @click="openDm(member)">
-            <MessageCircle class="h-4 w-4 text-ember" />
-            Mensagem
-          </button>
-          <button v-if="canViewSheet(member)" type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-bold text-white hover:bg-white/10" @click="openSheet(member)">
-            <Eye class="h-4 w-4 text-ember" />
-            Ver ficha
-          </button>
-        </div>
-      </div>
-      </div>
     </section>
 
-    <section class="grid items-start gap-5 xl:grid-cols-[1fr_320px]">
-      <div class="min-h-0">
+    <section class="grid items-start gap-5 xl:grid-cols-[260px_minmax(0,1fr)_320px]">
+      <aside class="space-y-4 xl:sticky xl:top-24">
+        <AppCard>
+          <div class="flex items-center justify-between gap-3">
+            <h2 class="flex items-center gap-2 text-sm font-black uppercase tracking-[0.08em] text-mist">
+              <Users class="h-4 w-4 text-ember" /> Jogadores
+            </h2>
+            <span class="text-xs font-bold text-mist">{{ onlineUserIds.size }}/{{ sortedMembers.length }}</span>
+          </div>
+          <div class="mt-4 space-y-2">
+            <div
+              v-for="member in sortedMembers"
+              :key="member.id"
+              class="relative rounded-lg border border-white/10 bg-white/[0.035] p-3 transition hover:bg-white/[0.06]"
+              :class="{ 'opacity-55': !isOnline(member), 'border-flare/50 bg-flare/10': isDead(member) }"
+            >
+              <button type="button" class="flex w-full items-center gap-3 text-left" @click="openDm(member)">
+                <div class="relative grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-lg font-black text-white" :style="{ backgroundColor: `${memberColor(member.user?.id)}33` }">
+                  <img v-if="member.character?.avatarUrl" :src="member.character.avatarUrl" class="h-full w-full object-cover" :alt="member.character.name">
+                  <span v-else>{{ (member.character?.name || member.user?.name || '?').slice(0, 1) }}</span>
+                </div>
+                <span class="min-w-0 flex-1">
+                  <span class="flex items-center gap-1 truncate font-black text-white">
+                    <Crown v-if="member.role === 'MASTER'" class="h-3.5 w-3.5 shrink-0 text-ember" />
+                    {{ member.character?.name || member.user?.name }}
+                  </span>
+                  <span class="mt-0.5 flex items-center gap-2 text-xs text-mist">
+                    <span class="h-2 w-2 rounded-full" :class="isOnline(member) ? 'bg-emerald-400' : 'bg-mist/50'" />
+                    {{ isDead(member) ? 'Fora de combate' : isOnline(member) ? 'Online' : 'Offline' }}
+                  </span>
+                </span>
+                <span v-if="canSeeMemberSheet(member) && !isDead(member)" class="text-xs font-bold text-mist">{{ member.character?.dataJson?.[primaryResource] ?? '-' }}</span>
+              </button>
+
+              <button
+                v-if="canOpenDm(member) || canViewSheet(member)"
+                type="button"
+                class="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-md text-mist hover:bg-white/10 hover:text-white"
+                title="Opcoes"
+                @click.stop="memberMenuId = memberMenuId === member.id ? null : member.id"
+              >
+                <MoreHorizontal class="h-4 w-4" />
+              </button>
+              <div v-if="memberMenuId === member.id" class="absolute right-2 top-10 z-20 w-44 rounded-lg border border-white/10 bg-panel p-1 shadow-soft" @click.stop>
+                <button v-if="canOpenDm(member)" type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-bold text-white hover:bg-white/10" @click="openDm(member)">
+                  <MessageCircle class="h-4 w-4 text-ember" /> Mensagem
+                </button>
+                <button v-if="canViewSheet(member)" type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-bold text-white hover:bg-white/10" @click="openSheet(member)">
+                  <Eye class="h-4 w-4 text-ember" /> Ver ficha
+                </button>
+              </div>
+            </div>
+          </div>
+        </AppCard>
+      </aside>
+
+      <main class="min-w-0 space-y-5">
         <ChatPanel
           ref="chat"
           :room-id="data.room.id"
@@ -282,8 +324,16 @@ onBeforeUnmount(() => {
           @clear-dm="clearDm"
           @close-dm="closeDm"
         />
-      </div>
-      <div class="grid gap-5">
+        <CharacterSheet
+          v-if="myCharacter?.dataJson && myCharacter.system"
+          :character="{ ...myCharacter, dataJson: myCharacter.dataJson, system: myCharacter.system }"
+          :room-id="data.room.id"
+          editable
+          @saved="refresh"
+        />
+      </main>
+
+      <aside class="grid gap-5 xl:sticky xl:top-24">
         <DiceRoller :room-id="data.room.id" :character-id="myCharacter?.id" :is-master="isMaster" @rolled="chat?.load()" />
         <InitiativePanel
           :room-id="data.room.id"
@@ -295,16 +345,10 @@ onBeforeUnmount(() => {
           :fields="data.room.system.fields"
           @event-created="reloadTable"
         />
-      </div>
+        <RoomNotes :room-id="data.room.id" :user-id="auth.user?.id" :is-master="isMaster" />
+      </aside>
     </section>
-    <RoomNotes :room-id="data.room.id" :user-id="auth.user?.id" :is-master="isMaster" />
-    <CharacterSheet
-      v-if="myCharacter?.dataJson && myCharacter.system"
-      :character="{ ...myCharacter, dataJson: myCharacter.dataJson, system: myCharacter.system }"
-      :room-id="data.room.id"
-      editable
-      @saved="refresh"
-    />
+
     <ConfirmModal
       :open="confirmDeleteOpen"
       title="Apagar sala"
@@ -316,7 +360,7 @@ onBeforeUnmount(() => {
     />
     <Teleport to="body">
       <div v-if="viewingCharacter" class="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
-        <div class="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-xl border border-white/10 bg-panel p-5 shadow-soft">
+        <div class="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-lg border border-white/10 bg-panel p-5 shadow-soft">
           <div class="mb-5 flex items-center justify-between gap-3">
             <div>
               <h2 class="text-xl font-black text-white">Ficha do jogador</h2>

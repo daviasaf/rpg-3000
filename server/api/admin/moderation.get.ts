@@ -12,6 +12,12 @@ export default defineEventHandler(async (event) => {
       where: { moderationStatus: status as 'PENDING' | 'APPROVED' | 'REJECTED' },
       include: {
         createdBy: { select: { id: true, name: true, email: true } },
+        fields: { orderBy: { order: 'asc' } },
+        comments: {
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+          include: { user: { select: { id: true, name: true, avatarUrl: true, profileColor: true } } }
+        },
         _count: { select: { characters: true, rooms: true, likes: true, comments: true } }
       },
       orderBy: { updatedAt: 'desc' },
@@ -22,6 +28,11 @@ export default defineEventHandler(async (event) => {
       include: {
         system: { select: { id: true, name: true } },
         createdBy: { select: { id: true, name: true, email: true } },
+        comments: {
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+          include: { user: { select: { id: true, name: true, avatarUrl: true, profileColor: true } } }
+        },
         _count: { select: { likes: true, comments: true } }
       },
       orderBy: { updatedAt: 'desc' },

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Plus, Settings, Trash2 } from 'lucide-vue-next'
+import { Bot, Plus, Settings, Trash2 } from 'lucide-vue-next'
 
 definePageMeta({ layout: 'app', middleware: 'auth' })
 
@@ -51,13 +51,11 @@ async function deleteNpc(id: string) {
 
 <template>
   <div class="space-y-5">
-    <div class="flex flex-wrap items-end justify-between gap-3">
-      <div>
-        <h1 class="page-title">NPCs</h1>
-        <p class="muted mt-1">Seu inventario de NPCs. Itens da comunidade entram aqui como copias independentes.</p>
-      </div>
-      <NuxtLink to="/app/npcs/new"><AppButton><Plus class="h-4 w-4" />Criar NPC</AppButton></NuxtLink>
-    </div>
+    <AppPageHeader title="NPCs" description="Seu inventario de NPCs. Itens da comunidade entram aqui como copias independentes.">
+      <template #actions>
+        <NuxtLink to="/app/npcs/new"><AppButton><Plus class="h-4 w-4" />Criar NPC</AppButton></NuxtLink>
+      </template>
+    </AppPageHeader>
 
     <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       <AppCard v-for="npc in data?.npcs" :key="npc.id">
@@ -93,8 +91,7 @@ async function deleteNpc(id: string) {
       </AppCard>
     </div>
 
-    <AppCard v-if="!data?.npcs.length">
-      <p class="text-mist">Voce ainda nao tem NPCs no inventario.</p>
-    </AppCard>
+    <EmptyState v-if="!data?.npcs.length" :icon="Bot" title="Voce ainda nao tem NPCs" description="Crie aliados, monstros e personagens do mestre para reutilizar nas cenas.">
+    </EmptyState>
   </div>
 </template>

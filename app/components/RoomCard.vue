@@ -14,7 +14,7 @@ defineProps<{
 </script>
 
 <template>
-  <NuxtLink :to="`/app/rooms/${room.id}`" class="surface group block rounded-xl p-4 transition hover:-translate-y-0.5 hover:border-ember/45">
+  <NuxtLink :to="`/app/rooms/${room.id}`" class="surface group block rounded-lg p-4 transition hover:border-ember/45">
     <span class="rounded-md border border-ember/25 bg-ember/10 px-2 py-0.5 text-[11px] font-bold text-ember">{{ room.system?.name }}</span>
     <h3 class="mt-4 text-lg font-black text-white group-hover:text-ember">{{ room.name }}</h3>
     <p class="mt-2 line-clamp-2 text-sm text-mist">{{ room.description || 'Campanha pronta para a proxima sessao.' }}</p>

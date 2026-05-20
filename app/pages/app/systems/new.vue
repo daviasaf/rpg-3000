@@ -9,6 +9,7 @@ const formErrors = ref<string[]>([])
 const basic = reactive({
   name: '',
   description: '',
+  avatarUrl: '',
   tags: '',
   visibility: 'PUBLIC'
 })
@@ -26,7 +27,7 @@ const schema = ref<SystemSchema>({
   classes: []
 })
 const fields = ref<DynamicField[]>([
-  { key: 'forca', label: 'Forca', type: 'NUMBER', category: 'ATTRIBUTE', defaultValue: 1, order: 0 },
+  { key: 'forca', label: 'Forca', type: 'NUMBER', category: 'ATTRIBUTE', defaultValue: 0, order: 0 },
   { key: 'vida', label: 'Vida', type: 'NUMBER', category: 'RESOURCE', defaultValue: 10, order: 1 },
   { key: 'historia', label: 'Historia', type: 'TEXT', category: 'TEXT_FIELD', defaultValue: '', order: 2 }
 ])
@@ -48,6 +49,7 @@ async function submit() {
       body: {
         name: basic.name,
         description: basic.description,
+        avatarUrl: basic.avatarUrl,
         tags: basic.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
         visibility: basic.visibility,
         schemaJson: normalizedSchema,
@@ -216,10 +218,11 @@ function keyFromLabel(label: string) {
     </div>
     <AppCard>
       <div class="grid gap-4">
-        <label><span class="label">Nome</span><input v-model="basic.name" name="systemName" class="input" type="text" placeholder="Meu sistema"></label>
+        <label><span class="label">Nome *</span><input v-model="basic.name" name="systemName" class="input" type="text" placeholder="Meu sistema"></label>
+        <label><span class="label">Avatar por URL</span><input v-model="basic.avatarUrl" name="systemAvatar" class="input" type="url" placeholder="https://..."></label>
         <label><span class="label">Tags</span><input v-model="basic.tags" name="tags" class="input" type="text" placeholder="fantasia, d20, investigacao"></label>
-        <label class="md:col-span-2"><span class="label">Descricao</span><textarea v-model="basic.description" rows="3" class="input" /></label>
-        <label><span class="label">Visibilidade</span><select v-model="basic.visibility" class="select"><option value="PUBLIC">Publico</option><option value="PRIVATE">Privado</option></select></label>
+        <label class="md:col-span-2"><span class="label">Descricao *</span><textarea v-model="basic.description" rows="3" class="input" /></label>
+        <label><span class="label">Visibilidade *</span><select v-model="basic.visibility" class="select"><option value="PUBLIC">Publico</option><option value="PRIVATE">Privado</option></select></label>
       </div>
     </AppCard>
     <AppCard v-if="formErrors.length" class="border-flare/40 bg-flare/10">

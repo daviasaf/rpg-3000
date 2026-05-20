@@ -3,6 +3,7 @@ import { z } from 'zod'
 export const registerSchema = z
   .object({
     name: z.string().trim().min(2, 'Informe seu nome.').max(80),
+    username: z.string().trim().min(2, 'Informe um nome de usuario.').max(32).regex(/^[a-zA-Z0-9_.-]+$/, 'Use letras, numeros, ponto, hifen ou underline.').optional(),
     email: z.string().trim().email('Email invalido.').toLowerCase(),
     password: z.string().min(8, 'Use pelo menos 8 caracteres.'),
     confirmPassword: z.string().min(8)
@@ -66,6 +67,7 @@ export const systemFieldSchema = z.object({
 export const createSystemSchema = z.object({
   name: z.string().trim().min(2, 'Informe o nome do sistema.').max(80, 'O nome do sistema esta muito longo.'),
   description: z.string().trim().min(8, 'Descreva o sistema em pelo menos 8 caracteres.').max(600, 'A descricao esta muito longa.'),
+  avatarUrl: z.string().trim().url('Informe uma URL valida.').optional().or(z.literal('')).nullable(),
   tags: z.array(z.string().trim().min(1).max(24)).max(8).default([]),
   visibility: z.enum(['PUBLIC', 'PRIVATE']).default('PUBLIC'),
   schemaJson: z
@@ -142,6 +144,6 @@ export const messageSchema = z.object({
 export const diceRollSchema = z.object({
   expression: z.string().trim().min(3).max(80),
   characterId: z.string().optional().nullable(),
-  mode: z.enum(['NORMAL', 'ADVANTAGE', 'DISADVANTAGE', 'CRITICAL', 'CUSTOM']).default('NORMAL'),
+  mode: z.literal('NORMAL').default('NORMAL'),
   hidden: z.boolean().optional().default(false)
 })

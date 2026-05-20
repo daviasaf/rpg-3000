@@ -17,6 +17,7 @@ export default defineEventHandler(async (event) => {
     user: {
       id: user.id,
       name: user.name,
+      username: user.username,
       email: user.email,
       avatarUrl: user.avatarUrl,
       profileColor: user.profileColor

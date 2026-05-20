@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 interface AuthUser {
   id: string
   name: string
+  username: string | null
   email: string
   avatarUrl: string | null
   profileColor: string

@@ -14,9 +14,9 @@ const systems = [
       categories: ['Atributos', 'Recursos', 'Identidade Bushi']
     },
     fields: [
-      ['forca', 'Forca', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 1],
-      ['agilidade', 'Agilidade', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 1],
-      ['astucia', 'Astucia', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 1],
+      ['forca', 'Forca', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 0],
+      ['agilidade', 'Agilidade', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 0],
+      ['astucia', 'Astucia', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 0],
       ['vida', 'Vida', FieldType.NUMBER, FieldCategory.RESOURCE, 12],
       ['fluxo', 'Fluxo', FieldType.NUMBER, FieldCategory.RESOURCE, 4],
       ['mente', 'Mente', FieldType.NUMBER, FieldCategory.RESOURCE, 4],
@@ -34,12 +34,12 @@ const systems = [
       categories: ['Atributos', 'Pericias', 'Recursos']
     },
     fields: [
-      ['forca', 'Forca', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 10],
-      ['destreza', 'Destreza', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 10],
-      ['constituicao', 'Constituicao', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 10],
-      ['inteligencia', 'Inteligencia', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 10],
-      ['sabedoria', 'Sabedoria', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 10],
-      ['carisma', 'Carisma', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 10],
+      ['forca', 'Forca', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 0],
+      ['destreza', 'Destreza', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 0],
+      ['constituicao', 'Constituicao', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 0],
+      ['inteligencia', 'Inteligencia', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 0],
+      ['sabedoria', 'Sabedoria', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 0],
+      ['carisma', 'Carisma', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 0],
       ['pontos_de_vida', 'Pontos de vida', FieldType.NUMBER, FieldCategory.RESOURCE, 10],
       ['classe', 'Classe', FieldType.LIST, FieldCategory.LIST_FIELD, 'Guerreiro', ['Guerreiro', 'Mago', 'Ladino', 'Clerigo']],
       ['historia', 'Historia', FieldType.TEXT, FieldCategory.TEXT_FIELD, '']
@@ -56,11 +56,11 @@ const systems = [
       categories: ['Atributos', 'Pericias', 'Recursos']
     },
     fields: [
-      ['forca', 'Forca', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 1],
-      ['agilidade', 'Agilidade', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 1],
-      ['intelecto', 'Intelecto', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 1],
-      ['presenca', 'Presenca', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 1],
-      ['vigor', 'Vigor', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 1],
+      ['forca', 'Forca', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 0],
+      ['agilidade', 'Agilidade', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 0],
+      ['intelecto', 'Intelecto', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 0],
+      ['presenca', 'Presenca', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 0],
+      ['vigor', 'Vigor', FieldType.NUMBER, FieldCategory.ATTRIBUTE, 0],
       ['investigacao', 'Investigacao', FieldType.NUMBER, FieldCategory.SKILL, 0],
       ['furtividade', 'Furtividade', FieldType.NUMBER, FieldCategory.SKILL, 0],
       ['vida', 'Vida', FieldType.NUMBER, FieldCategory.RESOURCE, 20],

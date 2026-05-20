@@ -40,7 +40,7 @@ export default defineEventHandler(async (event) => {
   const hidden = input.hidden && room.masterId === user.id
   const content = hidden
     ? `${actor} fez uma rolagem oculta. Resultado: ??`
-    : `${actor} rolou ${dice.expression}. ${formatDiceResult(dice)}`
+    : `${actor} rolou ${dice.expression}.\n${formatDiceResult(dice)}`
 
   const result = await prisma.$transaction(async (tx) => {
     const roll = await tx.diceRoll.create({
@@ -80,24 +80,18 @@ export default defineEventHandler(async (event) => {
 })
 
 function formatDiceResult(dice: ReturnType<typeof parseAndRollDice>) {
-  const rollText = dice.rolls
-    .map((roll, index) => {
-      const label = dice.rolls.length > 1 ? `rolagem ${index + 1}` : `${roll.count}d${roll.sides}`
-      return `${label}: ${roll.values.join(', ')}`
-    })
-    .join(' | ')
+  const roll = dice.rolls[0]
+  const values = roll?.values || []
+  const subtotal = values.reduce((sum, value) => sum + value, 0)
+  const lines = ['Resultados:']
 
-  const modifier = dice.modifier === 0 ? '' : `, modificador ${dice.modifier > 0 ? '+' : ''}${dice.modifier}`
+  values.forEach((value, index) => {
+    lines.push(`- Dado ${index + 1}: ${value}`)
+  })
 
-  if (dice.mode === 'ADVANTAGE_EXPRESSION') {
-    const values = dice.rolls[0]?.values || []
-    return `Resultado: ${dice.result} (${values.join(', ')}, maior ${Math.max(...values)}${modifier}).`
-  }
+  lines.push(`Total dos dados: ${subtotal}`)
+  if (dice.modifier) lines.push(`Modificador: ${dice.modifier > 0 ? '+' : ''}${dice.modifier}`)
+  lines.push(`Resultado final: ${dice.result}`)
 
-  if (dice.mode === 'ADVANTAGE' || dice.mode === 'DISADVANTAGE') {
-    const chosen = dice.mode === 'ADVANTAGE' ? 'maior' : 'menor'
-    return `Resultado: ${dice.result} (${rollText}, escolhido o ${chosen}${modifier}).`
-  }
-
-  return `Resultado: ${dice.result} (${rollText}${modifier}).`
+  return lines.join('\n')
 }

@@ -232,26 +232,30 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <AppCard class="flex h-[500px] flex-col">
-    <div class="flex border-b border-white/10">
-      <button type="button" class="px-4 py-3 text-sm font-black" :class="tab === 'TABLE' ? 'text-ember' : 'text-mist'" @click="tab = 'TABLE'">Chat da mesa</button>
-      <button type="button" class="px-4 py-3 text-sm font-black" :class="tab === 'LOG' ? 'text-ember' : 'text-mist'" @click="tab = 'LOG'">Log da mesa</button>
-      <button v-if="hasSecretChat" type="button" class="px-4 py-3 text-sm font-black" :class="tab === 'SECRET' ? 'text-ember' : 'text-mist'" @click="tab = 'SECRET'">Rolagens secretas</button>
-      <button v-if="dmUserId" type="button" class="px-4 py-3 text-sm font-black" :class="tab === 'DM' ? 'text-ember' : 'text-mist'" @click="tab = 'DM'; emit('clearDm', dmUserId)">{{ activeDmName }}</button>
-      <span v-if="dmUserId && unreadFor(dmUserId)" class="mt-2 h-5 min-w-5 rounded-full bg-flare px-1.5 text-center text-xs font-black text-white">{{ unreadFor(dmUserId) }}</span>
-      <button v-if="tab === 'SECRET'" type="button" class="ml-auto mr-2 mt-2 grid h-8 w-8 place-items-center rounded-lg text-mist hover:bg-white/10 hover:text-white" title="Fechar rolagens secretas" @click="closeSecretChat">
-        <X class="h-4 w-4" />
-      </button>
-      <button v-if="dmUserId" type="button" :class="tab === 'SECRET' ? 'mr-2 mt-2' : 'ml-auto mr-2 mt-2'" class="grid h-8 w-8 place-items-center rounded-lg text-mist hover:bg-white/10 hover:text-white" title="Fechar chat privado" @click="closePrivateChat">
-        <X class="h-4 w-4" />
-      </button>
+  <AppCard class="flex h-[620px] flex-col p-0">
+    <div class="border-b border-white/10 p-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <button type="button" class="rounded-md px-3 py-2 text-sm font-black transition" :class="tab === 'TABLE' ? 'bg-ember text-black' : 'text-mist hover:bg-white/10 hover:text-white'" @click="tab = 'TABLE'">Mesa</button>
+        <button type="button" class="rounded-md px-3 py-2 text-sm font-black transition" :class="tab === 'LOG' ? 'bg-ember text-black' : 'text-mist hover:bg-white/10 hover:text-white'" @click="tab = 'LOG'">Historico</button>
+        <button v-if="hasSecretChat" type="button" class="rounded-md px-3 py-2 text-sm font-black transition" :class="tab === 'SECRET' ? 'bg-ember text-black' : 'text-mist hover:bg-white/10 hover:text-white'" @click="tab = 'SECRET'">Secretas</button>
+        <button v-if="dmUserId" type="button" class="rounded-md px-3 py-2 text-sm font-black transition" :class="tab === 'DM' ? 'bg-ember text-black' : 'text-mist hover:bg-white/10 hover:text-white'" @click="tab = 'DM'; emit('clearDm', dmUserId)">
+          {{ activeDmName }}
+        </button>
+        <span v-if="dmUserId && unreadFor(dmUserId)" class="h-5 min-w-5 rounded-full bg-flare px-1.5 text-center text-xs font-black text-white">{{ unreadFor(dmUserId) }}</span>
+        <button v-if="tab === 'SECRET'" type="button" class="ml-auto grid h-8 w-8 place-items-center rounded-lg text-mist hover:bg-white/10 hover:text-white" title="Fechar rolagens secretas" @click="closeSecretChat">
+          <X class="h-4 w-4" />
+        </button>
+        <button v-if="dmUserId" type="button" :class="tab === 'SECRET' ? '' : 'ml-auto'" class="grid h-8 w-8 place-items-center rounded-lg text-mist hover:bg-white/10 hover:text-white" title="Fechar chat privado" @click="closePrivateChat">
+          <X class="h-4 w-4" />
+        </button>
+      </div>
     </div>
-    <div class="relative mt-4 min-h-0 flex-1">
-      <div ref="scroller" class="h-full min-h-[260px] space-y-3 overflow-y-auto pr-2" @scroll="updateJumpButton">
+    <div class="relative min-h-0 flex-1 p-4">
+      <div ref="scroller" class="h-full min-h-[320px] space-y-3 overflow-y-auto pr-2" @scroll="updateJumpButton">
         <div
           v-for="message in visibleMessages"
           :key="message.id"
-          class="relative rounded-lg border border-l-4 p-3"
+          class="relative rounded-lg border p-3"
           :style="messageStyle(message)"
           :class="{
             'border-arcane/35 bg-arcane/10': message.type === 'ROLL',
@@ -274,20 +278,20 @@ onBeforeUnmount(() => {
               Compartilhar
             </button>
           </div>
-          <p class="pr-9 font-black text-white">
+          <p class="pr-9 text-sm font-black text-white">
             <span v-if="message.type === 'PRIVATE'" class="mr-2 rounded bg-white/10 px-1.5 py-0.5 text-[10px] uppercase text-mist">DM</span>
             {{ displayName(message) }}
           </p>
-          <p class="mt-1 text-sm leading-6 text-white">{{ tab === 'SECRET' ? secretContent(message) : message.content }}</p>
+          <p class="mt-1 whitespace-pre-wrap text-sm leading-6 text-white">{{ tab === 'SECRET' ? secretContent(message) : message.content }}</p>
           <p class="mt-1 text-xs text-mist">{{ new Date(message.createdAt).toLocaleString('pt-BR') }}</p>
         </div>
-        <div v-if="visibleMessages.length === 0" class="rounded-lg border border-dashed border-white/15 p-8 text-center text-mist">Nenhuma mensagem ainda.</div>
+        <div v-if="visibleMessages.length === 0" class="rounded-lg border border-dashed border-white/15 p-8 text-center text-mist">Nada por aqui ainda.</div>
       </div>
       <button v-if="showJumpToBottom" type="button" class="absolute bottom-3 right-4 grid h-9 w-9 place-items-center rounded-full border border-ember/40 bg-panel/95 text-ember shadow-soft hover:bg-ember hover:text-black" title="Ir para a ultima mensagem" @click="scrollToEnd">
         <ArrowDown class="h-4 w-4" />
       </button>
     </div>
-    <form v-if="tab !== 'LOG' && tab !== 'SECRET'" class="mt-4 flex shrink-0 gap-2" @submit.prevent="send">
+    <form v-if="tab !== 'LOG' && tab !== 'SECRET'" class="flex shrink-0 gap-2 border-t border-white/10 p-3" @submit.prevent="send">
       <input v-model="content" class="input" :placeholder="tab === 'DM' ? `Mensagem privada para ${activeDmName}...` : 'Digite no chat da mesa...'">
       <AppButton type="submit" :loading="loading"><Send class="h-4 w-4" />Enviar</AppButton>
     </form>

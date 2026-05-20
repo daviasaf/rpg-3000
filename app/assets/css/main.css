@@ -4,12 +4,18 @@
 
 :root {
   color-scheme: dark;
-  --grid-dot: rgba(139, 92, 246, 0.16);
+  --grid-dot: rgba(226, 232, 240, 0.055);
+  --surface-bg: rgba(17, 18, 29, 0.84);
+  --surface-border: rgba(255, 255, 255, 0.09);
+  --surface-muted: rgba(255, 255, 255, 0.045);
 }
 
 :root.light-theme {
   color-scheme: light;
   --grid-dot: rgba(36, 28, 64, 0.08);
+  --surface-bg: rgba(255, 255, 255, 0.92);
+  --surface-border: rgba(15, 23, 42, 0.1);
+  --surface-muted: rgba(15, 23, 42, 0.045);
 }
 
 * {
@@ -20,18 +26,13 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at 18% 8%, rgba(255, 138, 19, 0.12), transparent 24rem),
-    radial-gradient(circle at 74% 12%, rgba(139, 92, 246, 0.15), transparent 28rem),
-    linear-gradient(135deg, #05050d 0%, #0b0915 48%, #120b1f 100%);
+  background: linear-gradient(180deg, #080913 0%, #0c0d17 45%, #11121c 100%);
   color: #f7f3ff;
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
 .light-theme body {
-  background:
-    radial-gradient(circle at 18% 8%, rgba(255, 138, 19, 0.10), transparent 24rem),
-    linear-gradient(135deg, #fbf9ff 0%, #f0edf7 100%);
+  background: linear-gradient(180deg, #f8fafc 0%, #f3f0f8 100%);
   color: #161322;
 }
 
@@ -91,12 +92,20 @@ body::before {
 }
 
 .app-shell-content {
-  padding-left: 76px;
+  padding-left: 0;
+  padding-bottom: 74px;
   transition: padding-left 300ms ease;
 }
 
-.sidebar-expanded .app-shell-content {
-  padding-left: 220px;
+@media (min-width: 768px) {
+  .app-shell-content {
+    padding-left: 76px;
+    padding-bottom: 0;
+  }
+
+  .sidebar-expanded .app-shell-content {
+    padding-left: 220px;
+  }
 }
 
 .auth-page-enter-active,
@@ -146,11 +155,11 @@ body::before {
 
 @layer components {
   .input {
-    @apply w-full rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-mist/55 focus:border-ember/70 focus:ring-2 focus:ring-ember/20;
+    @apply min-h-10 w-full rounded-lg border border-white/10 bg-white/[0.05] px-3 py-2 text-sm text-white outline-none transition placeholder:text-mist/55 focus:border-ember/70 focus:ring-2 focus:ring-ember/20;
   }
 
   .label {
-    @apply mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-mist;
+    @apply mb-1.5 block text-xs font-semibold uppercase tracking-[0.08em] text-mist;
   }
 
   .select {
@@ -166,11 +175,17 @@ body::before {
   }
 
   .surface {
-    @apply border border-white/10 bg-panel/95 shadow-[0_6px_14px_rgba(0,0,0,0.14)];
+    @apply border border-white/10 bg-panel/90 shadow-[0_1px_0_rgba(255,255,255,0.03)];
+    background: var(--surface-bg);
+    border-color: var(--surface-border);
+  }
+
+  .section-gap {
+    @apply space-y-6;
   }
 
   .shadow-soft {
-    @apply shadow-[0_10px_24px_rgba(0,0,0,0.28)];
+    @apply shadow-[0_12px_30px_rgba(0,0,0,0.18)];
   }
 
   .page-title {
@@ -179,6 +194,14 @@ body::before {
 
   .muted {
     @apply text-sm text-mist;
+  }
+
+  .soft-row {
+    @apply rounded-lg border border-white/10 bg-white/[0.04] transition hover:border-white/20 hover:bg-white/[0.065];
+  }
+
+  .kbd-chip {
+    @apply rounded-md border border-white/10 bg-white/[0.05] px-2 py-1 text-xs font-bold text-mist;
   }
 }
 

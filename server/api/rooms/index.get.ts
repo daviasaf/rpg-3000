@@ -15,6 +15,11 @@ export default defineEventHandler(async (event) => {
       system: { select: { id: true, name: true, schemaJson: true } },
       master: { select: { id: true, name: true } },
       members: { include: { character: true, user: { select: { id: true, name: true } } } },
+      sessions: {
+        orderBy: { startedAt: 'desc' },
+        take: 1,
+        select: { id: true, status: true, startedAt: true, endedAt: true }
+      },
       _count: { select: { members: true } }
     },
     orderBy: { updatedAt: 'desc' }

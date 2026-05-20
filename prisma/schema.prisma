@@ -60,9 +60,22 @@ enum ModerationStatus {
   REJECTED
 }
 
+enum FriendRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum ProfileChangeType {
+  PROFILE
+  EMAIL
+  PASSWORD
+}
+
 model User {
   id                  String               @id @default(cuid())
   name                String
+  username            String?              @unique
   email               String               @unique
   passwordHash        String
   avatarUrl           String?
@@ -81,6 +94,13 @@ model User {
   chatMessages        ChatMessage[]
   diceRolls           DiceRoll[]
   passwordResetTokens PasswordResetToken[]
+  profileChangeTokens ProfileChangeToken[]
+  sentFriendRequests  FriendRequest[]      @relation("FriendRequestSender")
+  receivedFriendRequests FriendRequest[]   @relation("FriendRequestReceiver")
+  profilePosts        ProfilePost[]
+  profileComments     ProfileComment[]
+  profileLikes        ProfileLike[]
+  privateMessages     PrivateMessage[]
 }
 
 model System {
@@ -88,6 +108,7 @@ model System {
   name        String
   slug        String           @unique
   description String
+  avatarUrl   String?
   tags        String[]
   visibility  SystemVisibility @default(PUBLIC)
   moderationStatus ModerationStatus @default(PENDING)
@@ -336,4 +357,85 @@ model PasswordResetToken {
 
   @@index([userId])
   @@index([tokenHash])
+}
+
+model ProfileChangeToken {
+  id        String            @id @default(cuid())
+  userId    String
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String
+  type      ProfileChangeType
+  payloadJson Json
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime          @default(now())
+
+  @@index([userId])
+  @@index([tokenHash])
+}
+
+model FriendRequest {
+  id         String              @id @default(cuid())
+  senderId   String
+  sender     User                @relation("FriendRequestSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId String
+  receiver   User                @relation("FriendRequestReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  status     FriendRequestStatus @default(PENDING)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  @@unique([senderId, receiverId])
+  @@index([receiverId, status])
+}
+
+model ProfilePost {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content   String
+  isPublic  Boolean          @default(true)
+  comments  ProfileComment[]
+  likes     ProfileLike[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([userId, createdAt])
+}
+
+model ProfileComment {
+  id        String      @id @default(cuid())
+  postId    String
+  post      ProfilePost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content   String
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([postId, createdAt])
+}
+
+model ProfileLike {
+  id        String      @id @default(cuid())
+  postId    String
+  post      ProfilePost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+
+  @@unique([postId, userId])
+  @@index([userId])
+}
+
+model PrivateMessage {
+  id         String   @id @default(cuid())
+  senderId   String
+  sender     User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId String
+  content    String
+  readAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([senderId, receiverId, createdAt])
+  @@index([receiverId, senderId, createdAt])
 }

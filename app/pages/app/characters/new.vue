@@ -39,7 +39,7 @@ const selectedClassChanges = computed(() => {
 watch(selectedSystem, (system) => {
   if (!system) return
   for (const field of system.fields) {
-    if (!(field.key in dataJson)) dataJson[field.key] = field.defaultValue ?? ''
+    if (!(field.key in dataJson)) dataJson[field.key] = field.category === 'ATTRIBUTE' ? Number(field.defaultValue ?? 0) : field.defaultValue ?? ''
   }
   for (const field of system.fields.filter((item) => item.category === 'ATTRIBUTE')) {
     dataJson[field.key] = Number(dataJson[field.key] || 0)
@@ -119,6 +119,7 @@ function validateCharacterDraft() {
   if (systemClasses.value.length && !progression.classKey) errors.push('Escolha uma classe.')
   for (const field of editableFields.value) {
     if (['FORMULA', 'ROLL_RULE', 'BOOLEAN_FIELD'].includes(field.category)) continue
+    if (field.key === 'historia' || field.category === 'TEXT_FIELD') continue
     const value = dataJson[field.key]
     if (field.type === 'BOOLEAN') continue
     if (value === undefined || value === null || String(value).trim() === '') {
@@ -139,10 +140,10 @@ function validateCharacterDraft() {
       <AppCard>
         <h2 class="mb-4 text-xl font-black text-white">Identidade</h2>
         <div class="grid gap-4">
-          <label><span class="label">Sistema</span><select v-model="selectedSystemId" class="select"><option v-for="system in systems?.systems" :key="system.id" :value="system.id">{{ system.name }}</option></select></label>
-          <label><span class="label">Nome</span><input v-model="form.name" name="characterName" class="input" type="text"></label>
+          <label><span class="label">Sistema *</span><select v-model="selectedSystemId" class="select" :disabled="!systems?.systems.length"><option v-if="!systems?.systems.length" value="">Nenhum sistema criado ainda</option><option v-for="system in systems?.systems" :key="system.id" :value="system.id">{{ system.name }}</option></select></label>
+          <label><span class="label">Nome *</span><input v-model="form.name" name="characterName" class="input" type="text"></label>
           <label><span class="label">Avatar por URL</span><input v-model="form.avatarUrl" name="avatarUrl" class="input" type="url" placeholder="https://..."></label>
-          <label><span class="label">Descricao curta</span><textarea v-model="form.description" rows="3" class="input" /></label>
+          <label><span class="label">Descricao curta</span><textarea v-model="form.description" rows="3" class="input" placeholder="Opcional" /></label>
         </div>
       </AppCard>
       <AppCard v-if="formErrors.length" class="border-flare/40 bg-flare/10">
@@ -185,8 +186,9 @@ function validateCharacterDraft() {
         </div>
         <div class="grid gap-4 md:grid-cols-2">
           <label>
-            <span class="label">Classe</span>
-            <select v-model="progression.classKey" class="select">
+            <span class="label">Classe *</span>
+            <select v-model="progression.classKey" class="select" :disabled="!systemClasses.length">
+              <option v-if="!systemClasses.length" value="">Nenhuma opcao disponivel</option>
               <option v-for="rpgClass in systemClasses" :key="rpgClass.key" :value="rpgClass.key">{{ rpgClass.name }}</option>
             </select>
           </label>

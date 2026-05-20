@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const defaults = Object.fromEntries(
-    system.fields.map((field) => [field.key, field.defaultValue ?? null])
+    system.fields.map((field) => [field.key, field.category === 'ATTRIBUTE' ? Number(field.defaultValue ?? 0) : field.defaultValue ?? null])
   )
   const dataJson = { ...defaults, ...input.dataJson }
 
