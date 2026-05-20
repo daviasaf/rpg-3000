@@ -14,6 +14,8 @@ const { data, refresh } = await useFetch<{ character: {
   name: string
   description?: string | null
   avatarUrl?: string | null
+  moderationStatus?: string | null
+  moderationReason?: string | null
   dataJson: Record<string, unknown>
   system: { name: string; schemaJson?: SystemSchema; fields: Array<{ id?: string; key: string; label: string; type: 'TEXT' | 'NUMBER' | 'BOOLEAN' | 'LIST' | 'FORMULA' | 'DICE'; category: 'ATTRIBUTE' | 'SKILL' | 'RESOURCE' | 'STATUS_BAR' | 'TEXT_FIELD' | 'NUMERIC_FIELD' | 'BOOLEAN_FIELD' | 'LIST_FIELD' | 'FORMULA' | 'ROLL_RULE'; defaultValue?: unknown; optionsJson?: unknown; formula?: string | null }> }
 } }>(`/api/characters/${route.params.id}`)
@@ -50,7 +52,11 @@ async function deleteCharacter() {
         </div>
       </div>
     </div>
-    <CharacterSheet :character="data.character" editable @saved="refresh" />
+    <AppCard v-if="data.character.moderationStatus === 'REJECTED'" class="border-flare/40 bg-flare/10">
+      <h2 class="font-black text-white">Personagem rejeitado</h2>
+      <p class="mt-2 text-sm text-red-100">{{ data.character.moderationReason || 'Este personagem esta bloqueado para edicao. Crie uma nova versao para enviar novamente.' }}</p>
+    </AppCard>
+    <CharacterSheet :character="data.character" :editable="data.character.moderationStatus !== 'REJECTED'" @saved="refresh" />
     <ConfirmModal
       :open="confirmDeleteOpen"
       title="Apagar personagem"

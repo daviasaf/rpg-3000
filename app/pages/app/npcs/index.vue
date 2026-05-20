@@ -10,33 +10,14 @@ const { data, refresh } = await useFetch<{ npcs: Array<{
   description?: string | null
   isCommunity: boolean
   moderationStatus?: string
+  moderationReason?: string | null
   system?: { id: string; name: string } | null
+  avatarUrl?: string | null
   createdBy?: { name: string } | null
   dataJson: Record<string, unknown>
 }> }>('/api/npcs')
 
-const editingId = ref('')
 const settingsOpen = ref('')
-
-async function updateNpc(npc: { id: string; name: string; description?: string | null; isCommunity: boolean; system?: { id: string } | null; dataJson: Record<string, unknown> }) {
-  try {
-    await $fetch(`/api/npcs/${npc.id}`, {
-      method: 'PUT',
-      body: {
-        name: npc.name,
-        description: npc.description,
-        systemId: npc.system?.id || null,
-        isCommunity: npc.isCommunity,
-        dataJson: npc.dataJson
-      }
-    })
-    editingId.value = ''
-    push('NPC atualizado.', 'success')
-    await refresh()
-  } catch (error) {
-    apiError(error, 'Nao foi possivel editar NPC.')
-  }
-}
 
 async function deleteNpc(id: string) {
   try {
@@ -45,6 +26,16 @@ async function deleteNpc(id: string) {
     await refresh()
   } catch (error) {
     apiError(error, 'Nao foi possivel apagar NPC.')
+  }
+}
+
+async function publishNpc(id: string) {
+  try {
+    await $fetch(`/api/npcs/${id}/publish`, { method: 'POST' })
+    push('NPC enviado para analise da comunidade.', 'success')
+    await refresh()
+  } catch (error) {
+    apiError(error, 'Nao foi possivel publicar NPC.')
   }
 }
 </script>
@@ -60,20 +51,24 @@ async function deleteNpc(id: string) {
     <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       <AppCard v-for="npc in data?.npcs" :key="npc.id">
         <div class="flex items-start justify-between gap-3">
-          <NuxtLink :to="`/app/npcs/${npc.id}`" class="min-w-0 hover:text-ember">
-            <h2 class="text-lg font-black text-white">{{ npc.name }}</h2>
+          <NuxtLink :to="`/app/npcs/${npc.id}`" class="flex min-w-0 flex-1 gap-3 hover:text-ember">
+            <AppAvatar :name="npc.name" :src="npc.avatarUrl" size="md" />
+            <span class="min-w-0">
+            <h2 class="truncate text-lg font-black text-white">{{ npc.name }}</h2>
             <p class="mt-1 text-sm text-mist">{{ npc.description || 'Sem descricao.' }}</p>
             <p class="mt-2 text-xs text-mist">
               {{ npc.system?.name || 'Generico' }} |
               {{ npc.moderationStatus === 'PENDING' ? 'Em analise' : npc.moderationStatus === 'REJECTED' ? 'Rejeitado' : npc.isCommunity ? 'Comunidade' : 'Privado' }}
             </p>
+            </span>
           </NuxtLink>
           <div class="relative">
             <button type="button" class="rounded-lg border border-white/10 p-2 text-mist hover:text-white" title="Configurar NPC" @click="settingsOpen = settingsOpen === npc.id ? '' : npc.id">
               <Settings class="h-4 w-4" />
             </button>
-            <div v-if="settingsOpen === npc.id" class="absolute right-0 top-10 z-10 w-40 rounded-lg border border-white/10 bg-panel p-1 shadow-soft">
-              <button type="button" class="block w-full rounded-md px-3 py-2 text-left text-sm font-bold text-white hover:bg-white/10" @click="editingId = npc.id; settingsOpen = ''">Editar</button>
+            <div v-if="settingsOpen === npc.id" class="absolute right-0 top-10 z-50 w-40 rounded-lg border border-white/10 bg-panel p-1 shadow-soft">
+              <NuxtLink v-if="npc.moderationStatus !== 'REJECTED'" :to="`/app/npcs/${npc.id}/edit`" class="block rounded-md px-3 py-2 text-sm font-bold text-white hover:bg-white/10">Editar</NuxtLink>
+              <button v-if="npc.moderationStatus !== 'REJECTED'" type="button" class="block w-full rounded-md px-3 py-2 text-left text-sm font-bold text-white hover:bg-white/10" @click="publishNpc(npc.id); settingsOpen = ''">Publicar</button>
               <button type="button" class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-bold text-red-100 hover:bg-flare/15" @click="deleteNpc(npc.id)"><Trash2 class="h-4 w-4" />Apagar</button>
             </div>
           </div>
@@ -83,11 +78,9 @@ async function deleteNpc(id: string) {
             {{ (attack as Record<string, unknown>).name }}: {{ (attack as Record<string, unknown>).damage }}
           </span>
         </div>
-        <div v-if="editingId === npc.id" class="mt-4 rounded-lg border border-white/10 bg-white/[0.04] p-3">
-          <label><span class="label">Descricao</span><input v-model="npc.description" class="input"></label>
-          <label class="mt-3 flex items-center gap-3"><input v-model="npc.isCommunity" type="checkbox" class="h-4 w-4 accent-ember"><span class="font-bold text-white">Aparecer na comunidade</span></label>
-          <AppButton class="mt-3" type="button" @click="updateNpc(npc)">Salvar NPC</AppButton>
-        </div>
+        <p v-if="npc.moderationStatus === 'REJECTED'" class="mt-3 rounded-lg border border-flare/35 bg-flare/10 p-3 text-sm font-bold text-red-100">
+          Rejeitado{{ npc.moderationReason ? `: ${npc.moderationReason}` : '. Bloqueado para edicao.' }}
+        </p>
       </AppCard>
     </div>
 

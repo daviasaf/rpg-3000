@@ -7,7 +7,8 @@ type CommentItem = {
   id: string
   content: string
   createdAt: string
-  user?: { id: string; name: string; avatarUrl?: string | null } | null
+  updatedAt?: string | null
+  user?: { id: string; name: string; avatarUrl?: string | null; profileColor?: string | null } | null
 }
 
 const route = useRoute()
@@ -24,6 +25,8 @@ const { data, refresh } = await useFetch<{ npc: {
   description?: string | null
   avatarUrl?: string | null
   isCommunity: boolean
+  moderationStatus?: string
+  moderationReason?: string | null
   system?: { id: string; name: string } | null
   createdById?: string | null
   createdBy?: { id: string; name: string; avatarUrl?: string | null } | null
@@ -34,6 +37,7 @@ const { data, refresh } = await useFetch<{ npc: {
 } }>(`/api/npcs/${route.params.id}`)
 
 const isOwner = computed(() => data.value?.npc.createdById === auth.user?.id)
+const isRejected = computed(() => data.value?.npc.moderationStatus === 'REJECTED')
 const liked = computed(() => Boolean(data.value?.npc.likes?.length))
 const attacks = computed(() => Array.isArray(data.value?.npc.dataJson.attacks) ? data.value.npc.dataJson.attacks as Array<Record<string, unknown>> : [])
 const statEntries = computed(() => Object.entries(data.value?.npc.dataJson || {}).filter(([key, value]) => key !== 'attacks' && typeof value !== 'object'))
@@ -96,9 +100,17 @@ async function sendComment() {
           <div v-else class="grid h-full place-items-center text-6xl font-black text-ember">{{ data.npc.name.slice(0, 1).toUpperCase() }}</div>
         </div>
         <div>
-          <p class="text-xs font-black uppercase tracking-[0.14em] text-ember">{{ data.npc.system?.name || 'NPC generico' }}</p>
+          <div class="flex flex-wrap items-center gap-2">
+            <p class="text-xs font-black uppercase tracking-[0.14em] text-ember">{{ data.npc.system?.name || 'NPC generico' }}</p>
+            <span v-if="data.npc.moderationStatus" class="rounded-md border px-2 py-1 text-xs font-bold" :class="isRejected ? 'border-flare/35 bg-flare/10 text-red-100' : data.npc.moderationStatus === 'PENDING' ? 'border-amber-300/30 bg-amber-300/10 text-amber-100' : 'border-emerald-400/25 bg-emerald-400/10 text-emerald-100'">
+              {{ data.npc.moderationStatus === 'PENDING' ? 'Em analise' : data.npc.moderationStatus === 'REJECTED' ? 'Rejeitado' : 'Aprovado' }}
+            </span>
+          </div>
           <h1 class="mt-2 page-title">{{ data.npc.name }}</h1>
           <p class="mt-3 max-w-3xl leading-7 text-mist">{{ data.npc.description || 'Sem descricao.' }}</p>
+          <p v-if="isRejected" class="mt-3 rounded-lg border border-flare/35 bg-flare/10 p-3 text-sm font-bold text-red-100">
+            Este NPC foi rejeitado e esta bloqueado para edicao. {{ data.npc.moderationReason ? `Motivo: ${data.npc.moderationReason}` : 'Crie uma nova versao para enviar novamente.' }}
+          </p>
           <p class="mt-3 text-sm text-mist">Criado por {{ data.npc.createdBy?.name || 'Jogador' }}</p>
           <div class="mt-5 flex flex-wrap gap-2">
             <button type="button" class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-bold" :class="liked ? 'border-ember bg-ember/15 text-ember' : 'border-white/10 bg-white/[0.04] text-white'" @click="toggleLike">
@@ -110,7 +122,7 @@ async function sendComment() {
             <AppButton v-if="!isOwner" variant="ghost" :loading="adding" @click="addToInventory">
               <PlusCircle class="h-4 w-4" />Adicionar ao inventario
             </AppButton>
-            <NuxtLink v-if="isOwner" to="/app/npcs"><AppButton variant="ghost">Editar no inventario</AppButton></NuxtLink>
+            <NuxtLink v-if="isOwner && !isRejected" :to="`/app/npcs/${data.npc.id}/edit`"><AppButton variant="ghost">Editar NPC</AppButton></NuxtLink>
           </div>
         </div>
       </div>
@@ -142,15 +154,13 @@ async function sendComment() {
 
     <AppCard>
       <h2 class="text-xl font-black text-white">Comentarios</h2>
-      <form class="mt-4 flex gap-2" @submit.prevent="sendComment">
-        <input v-model="comment" class="input" placeholder="Comentar...">
-        <AppButton type="submit" :loading="commenting">Enviar</AppButton>
-      </form>
-      <div class="mt-4 space-y-2">
-        <div v-for="item in data.npc.comments" :key="item.id" class="rounded-lg border border-white/10 bg-white/[0.04] p-3 text-sm text-mist">
-          <p><b class="text-white">{{ item.user?.name || 'Jogador' }}</b> <span class="text-xs">{{ new Date(item.createdAt).toLocaleString('pt-BR') }}</span></p>
-          <p class="mt-1 break-words">{{ item.content }}</p>
-        </div>
+      <div class="mt-4">
+        <AppCommentThread
+          :comments="data.npc.comments || []"
+          :endpoint="`/api/npcs/${data.npc.id}/comments`"
+          :current-user-id="auth.user?.id"
+          @refresh="refresh"
+        />
       </div>
     </AppCard>
   </div>

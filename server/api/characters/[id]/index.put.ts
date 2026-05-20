@@ -22,6 +22,10 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Voce nao pode editar esta ficha.' })
   }
 
+  if (character.moderationStatus === 'REJECTED') {
+    throw createError({ statusCode: 403, statusMessage: 'Personagem rejeitado nao pode ser editado. Crie uma nova versao para enviar novamente.' })
+  }
+
   const dataJson = input.dataJson ? { ...(character.dataJson as Record<string, unknown>), ...input.dataJson } : undefined
 
   const updated = await prisma.$transaction(async (tx) => {

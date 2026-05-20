@@ -27,7 +27,7 @@ export default defineEventHandler(async (event) => {
       sessions: { orderBy: { startedAt: 'desc' }, take: 1 },
       messages: {
         include: {
-          user: { select: { id: true, name: true } },
+          user: { select: { id: true, name: true, avatarUrl: true, profileColor: true } },
           character: { select: { id: true, name: true, avatarUrl: true } }
         },
         orderBy: { createdAt: 'desc' },

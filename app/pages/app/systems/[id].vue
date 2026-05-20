@@ -20,16 +20,19 @@ const { data, refresh } = await useFetch<{ system: {
   description: string
   tags: string[]
   visibility: string
+  moderationStatus?: string
+  moderationReason?: string | null
   createdById?: string | null
   createdBy?: { id: string; name: string } | null
   schemaJson?: SystemSchema
   fields: Array<{ id: string; key: string; label: string; type: string; category: string; defaultValue: unknown; formula?: string | null }>
   likes?: Array<{ id: string }>
-  comments?: Array<{ id: string; content: string; createdAt: string; user?: { name: string } | null }>
+  comments?: Array<{ id: string; content: string; createdAt: string; updatedAt?: string | null; user?: { id?: string; name?: string | null; avatarUrl?: string | null; profileColor?: string | null } | null }>
   _count?: { likes: number; comments: number; characters: number; rooms: number }
 } }>(`/api/systems/${route.params.id}`)
 
 const isOwner = computed(() => data.value?.system.createdById === auth.user?.id)
+const isRejected = computed(() => data.value?.system.moderationStatus === 'REJECTED')
 const classes = computed(() => data.value?.system.schemaJson?.classes || [])
 const liked = computed(() => Boolean(data.value?.system.likes?.length))
 const fieldGroups = computed(() => {
@@ -129,9 +132,15 @@ function categoryLabel(category: string) {
         <div>
           <div class="flex flex-wrap gap-2">
             <span v-for="tag in data.system.tags" :key="tag" class="rounded-md border border-ember/25 bg-ember/10 px-2 py-1 text-xs font-bold text-ember">{{ tag }}</span>
+            <span v-if="data.system.moderationStatus" class="rounded-md border px-2 py-1 text-xs font-bold" :class="isRejected ? 'border-flare/35 bg-flare/10 text-red-100' : data.system.moderationStatus === 'PENDING' ? 'border-amber-300/30 bg-amber-300/10 text-amber-100' : 'border-emerald-400/25 bg-emerald-400/10 text-emerald-100'">
+              {{ data.system.moderationStatus === 'PENDING' ? 'Em analise' : data.system.moderationStatus === 'REJECTED' ? 'Rejeitado' : 'Aprovado' }}
+            </span>
           </div>
           <h1 class="mt-4 page-title">{{ data.system.name }}</h1>
           <p class="mt-2 max-w-3xl text-mist">{{ data.system.description }}</p>
+          <p v-if="isRejected" class="mt-3 rounded-lg border border-flare/35 bg-flare/10 p-3 text-sm font-bold text-red-100">
+            Este sistema foi rejeitado e esta bloqueado para edicao. {{ data.system.moderationReason ? `Motivo: ${data.system.moderationReason}` : 'Crie uma nova versao para enviar novamente.' }}
+          </p>
           <p class="mt-3 text-sm text-mist">Criador: {{ data.system.createdBy?.name || 'Central RPG' }} | {{ data.system.visibility }}</p>
           <div class="mt-4 flex flex-wrap gap-2">
             <button type="button" class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-bold" :class="liked ? 'border-ember bg-ember/15 text-ember' : 'border-white/10 bg-white/[0.04] text-white'" @click="toggleLike">
@@ -155,7 +164,7 @@ function categoryLabel(category: string) {
               <Settings class="h-5 w-5" />
             </button>
             <div v-if="settingsOpen" class="absolute right-0 top-12 z-10 w-44 rounded-lg border border-white/10 bg-panel p-1 shadow-soft">
-              <NuxtLink :to="`/app/systems/${data.system.id}/edit`" class="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-bold text-white hover:bg-white/10"><Edit3 class="h-4 w-4" />Editar</NuxtLink>
+              <NuxtLink v-if="!isRejected" :to="`/app/systems/${data.system.id}/edit`" class="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-bold text-white hover:bg-white/10"><Edit3 class="h-4 w-4" />Editar</NuxtLink>
               <button type="button" class="block w-full rounded-md px-3 py-2 text-left text-sm font-bold text-red-100 hover:bg-flare/15" @click="confirmDeleteOpen = true; settingsOpen = false">Apagar</button>
             </div>
           </div>
@@ -187,6 +196,17 @@ function categoryLabel(category: string) {
             </div>
           </div>
         </div>
+      </div>
+    </AppCard>
+    <AppCard>
+      <h2 class="text-xl font-black text-white">Comentarios</h2>
+      <div class="mt-4">
+        <AppCommentThread
+          :comments="data.system.comments || []"
+          :endpoint="`/api/systems/${data.system.id}/comments`"
+          :current-user-id="auth.user?.id"
+          @refresh="refresh"
+        />
       </div>
     </AppCard>
     <ConfirmModal

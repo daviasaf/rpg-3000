@@ -1,6 +1,7 @@
 <script setup lang="ts">
 onMounted(async () => {
   const auth = useAuthStore()
+  if (!auth.user) await auth.fetchMe()
   const theme = localStorage.getItem('central-rpg:theme') || 'dark'
   const localAccent = localStorage.getItem('central-rpg:accent')
   const accent = localAccent || auth.user?.profileColor || '#ff8a13'

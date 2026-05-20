@@ -1,0 +1,19 @@
+import { createError, getRouterParam } from 'h3'
+import { requireAuth } from '../../../../utils/auth'
+import { prisma } from '../../../../utils/prisma'
+
+export default defineEventHandler(async (event) => {
+  const user = await requireAuth(event)
+  const id = getRouterParam(event, 'commentId') || ''
+  const comment = await prisma.communityPostComment.findUnique({
+    where: { id },
+    include: { post: { select: { authorId: true } } }
+  })
+
+  if (!comment) throw createError({ statusCode: 404, statusMessage: 'Comentario nao encontrado.' })
+  const canDelete = comment.userId === user.id || comment.post.authorId === user.id
+  if (!canDelete) throw createError({ statusCode: 403, statusMessage: 'Voce nao pode apagar este comentario.' })
+
+  await prisma.communityPostComment.delete({ where: { id } })
+  return { ok: true }
+})

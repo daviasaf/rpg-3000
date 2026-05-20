@@ -7,7 +7,7 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const status = ['PENDING', 'APPROVED', 'REJECTED'].includes(String(query.status)) ? String(query.status) : 'PENDING'
 
-  const [systems, npcs] = await Promise.all([
+  const [systems, npcs, posts] = await Promise.all([
     prisma.system.findMany({
       where: { moderationStatus: status as 'PENDING' | 'APPROVED' | 'REJECTED' },
       include: {
@@ -37,8 +37,22 @@ export default defineEventHandler(async (event) => {
       },
       orderBy: { updatedAt: 'desc' },
       take: 80
+    }),
+    prisma.communityPost.findMany({
+      where: { status: status as 'PENDING' | 'APPROVED' | 'REJECTED' },
+      include: {
+        author: { select: { id: true, name: true, username: true, email: true, avatarUrl: true, profileColor: true } },
+        comments: {
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+          include: { user: { select: { id: true, name: true, avatarUrl: true, profileColor: true } } }
+        },
+        _count: { select: { likes: true, comments: true } }
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 120
     })
   ])
 
-  return { systems, npcs }
+  return { systems, npcs, posts }
 })

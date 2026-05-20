@@ -21,6 +21,10 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Escolha um personagem compativel com a sala.' })
   }
 
+  const existingMember = await prisma.roomMember.findUnique({
+    where: { roomId_userId: { roomId: room.id, userId: user.id } }
+  })
+
   const member = await prisma.roomMember.upsert({
     where: { roomId_userId: { roomId: room.id, userId: user.id } },
     update: { characterId: character.id },
@@ -32,15 +36,17 @@ export default defineEventHandler(async (event) => {
     }
   })
 
-  await prisma.chatMessage.create({
-    data: {
-      roomId: room.id,
-      userId: user.id,
-      characterId: character.id,
-      type: 'SYSTEM',
-      content: `${character.name} entrou na sessao.`
-    }
-  })
+  if (!existingMember) {
+    await prisma.chatMessage.create({
+      data: {
+        roomId: room.id,
+        userId: user.id,
+        characterId: character.id,
+        type: 'SYSTEM',
+        content: `${character.name} entrou na sessao.`
+      }
+    })
+  }
 
   return { roomId: room.id, member }
 })

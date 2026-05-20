@@ -4,6 +4,7 @@ import { readZodBody } from '../../../utils/body'
 import { requireAuth } from '../../../utils/auth'
 import { jsonValue } from '../../../utils/json'
 import { prisma } from '../../../utils/prisma'
+import { publishNpcSnapshot } from '../../../utils/community'
 
 const updateNpcSchema = z.object({
   name: z.string().trim().min(2).max(80).optional(),
@@ -28,6 +29,10 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Voce so pode editar NPCs criados por voce.' })
   }
 
+  if (npc.moderationStatus === 'REJECTED') {
+    throw createError({ statusCode: 403, statusMessage: 'NPC rejeitado nao pode ser editado. Crie uma nova versao para enviar novamente.' })
+  }
+
   const updated = await prisma.npc.update({
     where: { id },
     data: {
@@ -37,6 +42,7 @@ export default defineEventHandler(async (event) => {
       systemId: input.systemId === undefined ? undefined : input.systemId || null,
       isCommunity: input.isCommunity,
       moderationStatus: input.isCommunity === true ? 'PENDING' : input.isCommunity === false ? 'APPROVED' : undefined,
+      moderationReason: input.isCommunity === true || input.isCommunity === false ? null : undefined,
       dataJson: input.dataJson === undefined ? undefined : jsonValue(input.dataJson)
     },
     include: {
@@ -45,6 +51,10 @@ export default defineEventHandler(async (event) => {
       _count: { select: { likes: true, comments: true } }
     }
   })
+
+  if (input.isCommunity === true) {
+    await publishNpcSnapshot(updated.id, user.id)
+  }
 
   return { npc: updated }
 })

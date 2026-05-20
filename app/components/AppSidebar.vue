@@ -25,7 +25,8 @@ function toggleSidebar() {
 }
 
 onMounted(() => {
-  expanded.value = localStorage.getItem('central-rpg:sidebar-expanded') === '1'
+  const saved = localStorage.getItem('central-rpg:sidebar-expanded')
+  expanded.value = saved === null ? window.matchMedia('(min-width: 768px)').matches : saved === '1'
   applySidebarState()
 })
 </script>

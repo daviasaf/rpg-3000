@@ -11,8 +11,11 @@ const { data } = await useFetch<{ system: {
   id: string
   name: string
   description: string
+  avatarUrl?: string | null
   tags: string[]
   visibility: 'PUBLIC' | 'PRIVATE'
+  moderationStatus?: string
+  moderationReason?: string | null
   schemaJson?: SystemSchema
   fields: DynamicField[]
 } }>(`/api/systems/${route.params.id}`)
@@ -20,6 +23,7 @@ const { data } = await useFetch<{ system: {
 const basic = reactive({
   name: data.value?.system.name || '',
   description: data.value?.system.description || '',
+  avatarUrl: data.value?.system.avatarUrl || '',
   tags: data.value?.system.tags.join(', ') || '',
   visibility: data.value?.system.visibility || 'PUBLIC'
 })
@@ -38,8 +42,10 @@ const schema = ref<SystemSchema>({
   classes: data.value?.system.schemaJson?.classes || []
 })
 const fields = ref<DynamicField[]>((data.value?.system.fields || []).map((field, index) => ({ ...field, order: field.order ?? index })))
+const isRejected = computed(() => data.value?.system.moderationStatus === 'REJECTED')
 
 async function submit() {
+  if (isRejected.value) return
   formErrors.value = validateDraft()
   if (formErrors.value.length) {
     push('Corrija os pontos destacados antes de salvar o sistema.', 'error')
@@ -54,6 +60,7 @@ async function submit() {
       body: {
         name: basic.name,
         description: basic.description,
+        avatarUrl: basic.avatarUrl,
         tags: basic.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
         visibility: basic.visibility,
         schemaJson: normalizeSchema(schema.value, normalizedFields),
@@ -64,6 +71,19 @@ async function submit() {
     await navigateTo(`/app/systems/${route.params.id}`)
   } catch (error) {
     apiError(error, 'Nao foi possivel editar o sistema.')
+  } finally {
+    loading.value = false
+  }
+}
+
+async function publishSystem() {
+  if (isRejected.value) return
+  loading.value = true
+  try {
+    await $fetch(`/api/systems/${route.params.id}/publish`, { method: 'POST' })
+    push('Sistema enviado para analise da comunidade.', 'success')
+  } catch (error) {
+    apiError(error, 'Nao foi possivel publicar o sistema.')
   } finally {
     loading.value = false
   }
@@ -161,12 +181,17 @@ function keyFromLabel(label: string) {
       <h1 class="page-title">Editar sistema</h1>
       <p class="muted mt-1">Ajuste campos, classes e regras dinamicas.</p>
     </div>
+    <AppCard v-if="isRejected" class="border-flare/40 bg-flare/10">
+      <h2 class="font-black text-white">Sistema rejeitado</h2>
+      <p class="mt-2 text-sm text-red-100">{{ data.system.moderationReason || 'Este sistema esta bloqueado para edicao. Crie uma nova versao para enviar novamente.' }}</p>
+    </AppCard>
     <AppCard>
-      <div class="grid gap-4">
-        <label><span class="label">Nome</span><input v-model="basic.name" class="input" type="text"></label>
+      <div class="grid gap-4 md:grid-cols-2">
+        <label><span class="label">Nome *</span><input v-model="basic.name" class="input" type="text"></label>
+        <label><span class="label">Avatar por URL</span><input v-model="basic.avatarUrl" class="input" type="url" placeholder="https://..."></label>
         <label><span class="label">Tags</span><input v-model="basic.tags" class="input" type="text"></label>
-        <label class="md:col-span-2"><span class="label">Descricao</span><textarea v-model="basic.description" rows="3" class="input" /></label>
-        <label><span class="label">Visibilidade</span><select v-model="basic.visibility" class="select"><option value="PUBLIC">Publico</option><option value="PRIVATE">Privado</option></select></label>
+        <label class="md:col-span-2"><span class="label">Descricao *</span><textarea v-model="basic.description" rows="3" class="input" /></label>
+        <label><span class="label">Visibilidade *</span><select v-model="basic.visibility" class="select"><option value="PUBLIC">Publico</option><option value="PRIVATE">Privado</option></select></label>
       </div>
     </AppCard>
     <AppCard v-if="formErrors.length" class="border-flare/40 bg-flare/10">
@@ -177,7 +202,10 @@ function keyFromLabel(label: string) {
     </AppCard>
     <DynamicSheetBuilder v-model:fields="fields" v-model:schema="schema">
       <template #publish>
-        <AppButton class="mt-5" :loading="loading" @click="submit">Salvar alteracoes</AppButton>
+        <div class="mt-5 flex flex-wrap gap-2">
+          <AppButton :loading="loading" :disabled="isRejected" @click="submit">Salvar alteracoes</AppButton>
+          <AppButton variant="ghost" :loading="loading" :disabled="isRejected" @click="publishSystem">Republicar na comunidade</AppButton>
+        </div>
       </template>
     </DynamicSheetBuilder>
   </div>

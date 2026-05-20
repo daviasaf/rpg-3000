@@ -217,7 +217,7 @@ function keyFromLabel(label: string) {
       <p class="muted mt-1">Defina atributos, recursos, pericias, campos, formulas e regras sem alterar codigo.</p>
     </div>
     <AppCard>
-      <div class="grid gap-4">
+      <div class="grid gap-4 md:grid-cols-2">
         <label><span class="label">Nome *</span><input v-model="basic.name" name="systemName" class="input" type="text" placeholder="Meu sistema"></label>
         <label><span class="label">Avatar por URL</span><input v-model="basic.avatarUrl" name="systemAvatar" class="input" type="url" placeholder="https://..."></label>
         <label><span class="label">Tags</span><input v-model="basic.tags" name="tags" class="input" type="text" placeholder="fantasia, d20, investigacao"></label>

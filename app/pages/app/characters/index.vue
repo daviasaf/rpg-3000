@@ -8,6 +8,8 @@ const { data } = await useFetch<{ characters: Array<{
   name: string
   description?: string | null
   avatarUrl?: string | null
+  moderationStatus?: string | null
+  moderationReason?: string | null
   system?: { name: string }
 }> }>('/api/characters')
 </script>

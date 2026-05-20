@@ -10,6 +10,11 @@ const email = ref('')
 const password = ref('')
 const loading = ref(false)
 
+onMounted(async () => {
+  if (!auth.user) await auth.fetchMe()
+  if (auth.user) await navigateTo(typeof route.query.redirect === 'string' ? route.query.redirect : '/app')
+})
+
 async function submit() {
   loading.value = true
   try {

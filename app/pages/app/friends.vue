@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Check, MessageCircle, Search, UserPlus, X } from 'lucide-vue-next'
+import { Check, MessageCircle, Search, UserMinus, UserPlus, X } from 'lucide-vue-next'
 
 definePageMeta({ layout: 'app', middleware: 'auth' })
 
@@ -13,6 +13,12 @@ const message = ref('')
 const { data, refresh } = await useFetch<{ friends: SocialUser[]; sent: FriendRequest[]; received: FriendRequest[] }>('/api/social/friends', { default: () => ({ friends: [], sent: [], received: [] }) })
 const { data: searchData, refresh: searchUsers } = await useFetch<{ users: SocialUser[] }>(() => `/api/social/users?q=${encodeURIComponent(q.value)}`, { immediate: false, watch: false, default: () => ({ users: [] }) })
 const { data: conversation, refresh: refreshConversation } = await useFetch<{ messages: Array<{ id: string; content: string; createdAt: string; sender: SocialUser }> }>(() => selectedFriend.value ? `/api/social/messages/${selectedFriend.value.id}` : '/api/social/messages/none', { immediate: false, watch: false, default: () => ({ messages: [] }) })
+
+onMounted(async () => {
+  const chatId = typeof useRoute().query.chat === 'string' ? useRoute().query.chat : ''
+  const friend = data.value.friends.find((item) => item.id === chatId)
+  if (friend) await openChat(friend)
+})
 
 watch(q, async () => {
   if (q.value.trim().length >= 2) await searchUsers()
@@ -50,8 +56,30 @@ async function sendMessage() {
     await $fetch(`/api/social/messages/${selectedFriend.value.id}`, { method: 'POST', body: { content: message.value } })
     message.value = ''
     await refreshConversation()
+    push('Mensagem enviada.', 'success')
   } catch (error) {
     apiError(error, 'Nao foi possivel enviar mensagem.')
+  }
+}
+
+function inviteLink(content: string) {
+  const match = content.match(/\/app\/rooms\/join\?code=[A-Z0-9-]+/i)
+  return match?.[0] || ''
+}
+
+function cleanMessage(content: string) {
+  return content.replace(/\[convite:[^\]]+\]\s*/, '').replace(/\s*Acesse:\s*\/app\/rooms\/join\?code=[A-Z0-9-]+/i, '').trim()
+}
+
+async function removeFriend(friend: SocialUser) {
+  if (!friend.id || !confirm(`Remover ${friend.name} da sua lista de amigos?`)) return
+  try {
+    await $fetch(`/api/social/friends/${friend.id}`, { method: 'DELETE' })
+    if (selectedFriend.value?.id === friend.id) selectedFriend.value = null
+    push('Amizade removida.', 'success')
+    await refresh()
+  } catch (error) {
+    apiError(error, 'Nao foi possivel remover amizade.')
   }
 }
 </script>
@@ -74,7 +102,7 @@ async function sendMessage() {
                 <AppAvatar :name="user.name" :src="user.avatarUrl" :color="user.profileColor" rounded="full" />
                 <div class="min-w-0">
                 <NuxtLink :to="`/app/profiles/${user.id}`" class="truncate font-black text-white hover:text-ember">{{ user.name }}</NuxtLink>
-                  <p class="truncate text-xs text-mist">@{{ user.username }}</p>
+                  <p class="truncate text-xs text-mist">{{ user.username ? `@${user.username}` : 'sem usuario publico' }}</p>
                 </div>
               </div>
               <button type="button" class="grid h-9 w-9 place-items-center rounded-lg text-ember hover:bg-white/10" @click="addFriend(user.id)">
@@ -104,28 +132,36 @@ async function sendMessage() {
         <AppCard>
           <h2 class="font-black text-white">Amigos</h2>
           <div class="mt-3 space-y-2">
-            <button v-for="friend in data.friends" :key="friend.id" type="button" class="soft-row flex w-full items-center gap-3 p-3 text-left" @click="openChat(friend)">
+            <div v-for="friend in data.friends" :key="friend.id" class="soft-row flex w-full items-center gap-3 p-3 text-left">
+              <button type="button" class="flex min-w-0 flex-1 items-center gap-3 text-left" @click="openChat(friend)">
               <AppAvatar :name="friend.name" :src="friend.avatarUrl" :color="friend.profileColor" rounded="full" />
               <span class="min-w-0 flex-1">
                 <NuxtLink :to="`/app/profiles/${friend.id}`" class="block truncate font-black text-white hover:text-ember" @click.stop>{{ friend.name }}</NuxtLink>
-                <span class="block truncate text-xs text-mist">@{{ friend.username }}</span>
+                <span class="block truncate text-xs text-mist">{{ friend.username ? `@${friend.username}` : 'sem usuario publico' }}</span>
               </span>
               <MessageCircle class="h-4 w-4 text-ember" />
-            </button>
+              </button>
+              <button type="button" class="grid h-8 w-8 place-items-center rounded-md text-mist hover:bg-white/10 hover:text-red-100" title="Remover amizade" @click.stop="removeFriend(friend)">
+                <UserMinus class="h-4 w-4" />
+              </button>
+            </div>
             <EmptyState v-if="!data.friends.length" title="Nenhum amigo ainda" description="Busque jogadores pelo nome, usuario ou email para iniciar sua rede." />
           </div>
         </AppCard>
       </div>
 
-      <AppCard class="flex min-h-[560px] flex-col p-0">
+      <AppCard class="flex h-[min(680px,calc(100vh-210px))] min-h-[500px] flex-col overflow-hidden p-0">
         <div class="border-b border-white/10 p-4">
           <h2 class="font-black text-white">{{ selectedFriend ? selectedFriend.name : 'Mensagens privadas' }}</h2>
-          <p class="text-sm text-mist">{{ selectedFriend ? `@${selectedFriend.username}` : 'Selecione um amigo para abrir a conversa.' }}</p>
+          <p class="text-sm text-mist">{{ selectedFriend ? (selectedFriend.username ? `@${selectedFriend.username}` : 'sem usuario publico') : 'Selecione um amigo para abrir a conversa.' }}</p>
         </div>
         <div class="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
           <div v-for="item in conversation.messages" :key="item.id" class="max-w-[78%] rounded-lg border border-white/10 bg-white/[0.04] p-3 text-sm text-white" :class="item.sender.id === selectedFriend?.id ? '' : 'ml-auto bg-ember/15'">
             <p class="font-bold">{{ item.sender.name }}</p>
-            <p class="mt-1 whitespace-pre-wrap leading-6">{{ item.content }}</p>
+            <p class="mt-1 whitespace-pre-wrap leading-6">{{ cleanMessage(item.content) }}</p>
+            <NuxtLink v-if="inviteLink(item.content)" :to="inviteLink(item.content)" class="mt-3 inline-flex min-h-9 items-center rounded-lg border border-ember/35 bg-ember/10 px-3 text-xs font-black text-ember hover:bg-ember hover:text-black">
+              Entrar na sessao
+            </NuxtLink>
             <p class="mt-1 text-xs text-mist">{{ new Date(item.createdAt).toLocaleString('pt-BR') }}</p>
           </div>
           <EmptyState v-if="selectedFriend && !conversation.messages.length" title="Conversa vazia" description="Envie a primeira mensagem privada." />

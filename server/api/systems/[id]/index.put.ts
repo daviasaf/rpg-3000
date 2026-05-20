@@ -19,6 +19,10 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Voce so pode editar sistemas criados por voce.' })
   }
 
+  if (system.moderationStatus === 'REJECTED') {
+    throw createError({ statusCode: 403, statusMessage: 'Sistema rejeitado nao pode ser editado. Crie uma nova versao para enviar novamente.' })
+  }
+
   const updated = await prisma.$transaction(async (tx) => {
     if (input.fields) {
       const keys = new Set(input.fields.map((field) => field.key))
@@ -37,6 +41,7 @@ export default defineEventHandler(async (event) => {
         tags: input.tags,
         visibility: input.visibility,
         moderationStatus: input.visibility === 'PUBLIC' ? 'PENDING' : input.visibility === 'PRIVATE' ? 'APPROVED' : undefined,
+        moderationReason: input.visibility === 'PUBLIC' || input.visibility === 'PRIVATE' ? null : undefined,
         schemaJson: input.schemaJson === undefined ? undefined : jsonValue(input.schemaJson),
         fields: input.fields
           ? {

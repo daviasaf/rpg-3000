@@ -10,6 +10,7 @@ const { data } = await useFetch<{ systems: Array<{
   tags: string[]
   visibility: string
   moderationStatus?: string
+  moderationReason?: string | null
   createdBy?: { name: string } | null
   _count?: { characters: number; rooms: number }
 }> }>('/api/systems?mine=true')

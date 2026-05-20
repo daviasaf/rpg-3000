@@ -3,6 +3,7 @@ import { requireAuth } from '../../utils/auth'
 import { prisma } from '../../utils/prisma'
 import { jsonValue } from '../../utils/json'
 import { readZodBody } from '../../utils/body'
+import { publishNpcSnapshot } from '../../utils/community'
 
 const npcSchema = z.object({
   name: z.string().trim().min(2).max(80),
@@ -34,6 +35,10 @@ export default defineEventHandler(async (event) => {
       _count: { select: { likes: true, comments: true } }
     }
   })
+
+  if (input.isCommunity) {
+    await publishNpcSnapshot(npc.id, user.id)
+  }
 
   return { npc }
 })

@@ -15,6 +15,20 @@ export default defineEventHandler(async (event) => {
 
   if (result.changed) {
     const session = await prisma.session.findFirst({ where: { roomId, status: 'ACTIVE' } })
+    const action = online ? 'PRESENCE_JOIN' : 'PRESENCE_LEAVE'
+    const recent = await prisma.chatMessage.findFirst({
+      where: {
+        roomId,
+        userId: user.id,
+        type: 'SYSTEM',
+        content: online ? `${user.name} entrou na sala.` : `${user.name} saiu da sala.`,
+        createdAt: { gte: new Date(Date.now() - 1000 * 60 * 5) }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    if (recent) return { online, skipped: true }
+
     await prisma.chatMessage.create({
       data: {
         roomId,
@@ -22,7 +36,7 @@ export default defineEventHandler(async (event) => {
         userId: user.id,
         type: 'SYSTEM',
         content: online ? `${user.name} entrou na sala.` : `${user.name} saiu da sala.`,
-        metadataJson: { action: online ? 'PRESENCE_JOIN' : 'PRESENCE_LEAVE' }
+        metadataJson: { action }
       }
     })
   }

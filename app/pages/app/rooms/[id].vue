@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Crown, Eye, MessageCircle, MoreHorizontal, Play, Radio, Settings, Square, Users, X } from 'lucide-vue-next'
+import { Crown, Eye, LogOut, MessageCircle, MoreHorizontal, Play, Radio, Search, Settings, Square, UserPlus, Users, X } from 'lucide-vue-next'
 import type { SystemSchema } from '../../../../shared/types/system'
 
 definePageMeta({ layout: 'app', middleware: 'auth' })
@@ -18,7 +18,9 @@ const { data, refresh, error } = await useFetch<{ room: {
   description?: string | null
   code: string
   masterId: string
+  mapJson?: { columns: number; rows: number; tokens: Array<{ id: string; name: string; avatarUrl?: string | null; color?: string | null; kind: 'CHARACTER' | 'NPC' | 'MARKER'; x: number; y: number; previousX?: number | null; previousY?: number | null }> } | null
   system: {
+    id: string
     name: string
     schemaJson?: { primaryResource?: string }
     fields: Array<{ key: string; label: string; type: string; category: string }>
@@ -33,6 +35,8 @@ const { data, refresh, error } = await useFetch<{ room: {
     system?: { name: string; schemaJson?: SystemSchema; fields: Array<{ id?: string; key: string; label: string; type: 'TEXT' | 'NUMBER' | 'BOOLEAN' | 'LIST' | 'FORMULA' | 'DICE'; category: 'ATTRIBUTE' | 'SKILL' | 'RESOURCE' | 'STATUS_BAR' | 'TEXT_FIELD' | 'NUMERIC_FIELD' | 'BOOLEAN_FIELD' | 'LIST_FIELD' | 'FORMULA' | 'ROLL_RULE'; defaultValue?: unknown; optionsJson?: unknown; formula?: string | null }> }
   } | null }>
 } }>(`/api/rooms/${route.params.id}`)
+const { data: myCharacters } = await useFetch<{ characters: Array<{ id: string; name: string; systemId: string; system?: { id: string; name: string } }> }>('/api/characters', { default: () => ({ characters: [] }) })
+const { data: friendsData } = await useFetch<{ friends: Array<{ id: string; name: string; username?: string | null; avatarUrl?: string | null; profileColor?: string | null }> }>('/api/social/friends', { default: () => ({ friends: [] }) })
 
 watch(error, async (next) => {
   if (!next) return
@@ -55,6 +59,12 @@ const viewingMemberId = ref<string | null>(null)
 const unreadByUserId = reactive<Record<string, number>>({})
 const onlineUserIds = ref(new Set<string>())
 const userAccent = ref('#ff8a13')
+const settingsSaving = ref(false)
+const selectedCharacterId = ref('')
+const inviteOpen = ref(false)
+const inviteSearch = ref('')
+const selectedInviteIds = ref(new Set<string>())
+const inviting = ref(false)
 let roomTimer: ReturnType<typeof setInterval> | null = null
 let presenceTimer: ReturnType<typeof setInterval> | null = null
 let leavingRoom = false
@@ -110,6 +120,18 @@ const sortedMembers = computed(() => [...roomMembers.value].sort((left, right) =
   const rightOnline = isOnline(right) ? 0 : 1
   return leftOnline - rightOnline
 }))
+const compatibleCharacters = computed(() => (myCharacters.value?.characters || []).filter((character) => character.systemId === data.value?.room.system.id))
+const availableFriends = computed(() => {
+  const term = inviteSearch.value.trim().toLowerCase()
+  const memberIds = new Set((data.value?.room.members || []).map((member) => member.user?.id).filter(Boolean))
+  return (friendsData.value?.friends || [])
+    .filter((friend) => !memberIds.has(friend.id))
+    .filter((friend) => !term || `${friend.name} ${friend.username || ''}`.toLowerCase().includes(term))
+})
+
+watch(myCharacter, (next) => {
+  selectedCharacterId.value = next?.id || ''
+}, { immediate: true })
 
 function isOnline(member: { user?: { id: string } | null }) {
   return Boolean(member.user?.id && onlineUserIds.value.has(member.user.id))
@@ -203,6 +225,47 @@ async function endSession() {
   }
 }
 
+async function changeCharacter() {
+  if (!data.value?.room.id || !selectedCharacterId.value) return
+  settingsSaving.value = true
+  try {
+    await $fetch(`/api/rooms/${data.value.room.id}/character`, {
+      method: 'PUT',
+      body: { characterId: selectedCharacterId.value }
+    })
+    push('Personagem da sessao atualizado.', 'success')
+    await reloadTable()
+  } catch (error) {
+    apiError(error, 'Nao foi possivel trocar o personagem.')
+  } finally {
+    settingsSaving.value = false
+  }
+}
+
+function toggleInviteSelection(id: string) {
+  const next = new Set(selectedInviteIds.value)
+  next.has(id) ? next.delete(id) : next.add(id)
+  selectedInviteIds.value = next
+}
+
+async function sendInvites() {
+  if (!data.value?.room.id || selectedInviteIds.value.size === 0) return
+  inviting.value = true
+  try {
+    const response = await $fetch<{ invited: number }>(`/api/rooms/${data.value.room.id}/invites`, {
+      method: 'POST',
+      body: { userIds: [...selectedInviteIds.value] }
+    })
+    selectedInviteIds.value = new Set()
+    inviteOpen.value = false
+    push(`${response.invited} convite(s) enviado(s).`, 'success')
+  } catch (error) {
+    apiError(error, 'Nao foi possivel enviar convites.')
+  } finally {
+    inviting.value = false
+  }
+}
+
 onMounted(() => {
   userAccent.value = auth.user?.profileColor || localStorage.getItem('central-rpg:accent') || '#ff8a13'
   setPresence(true)
@@ -242,17 +305,24 @@ onBeforeUnmount(() => {
         <div class="flex flex-wrap items-center gap-2">
           <AppButton v-if="isMaster && !activeSession" :loading="sessionLoading" @click="startSession"><Play class="h-4 w-4" />Iniciar sessao</AppButton>
           <AppButton v-if="isMaster && activeSession" variant="ghost" :loading="sessionLoading" @click="endSession"><Square class="h-4 w-4" />Encerrar</AppButton>
-          <div v-if="isMaster" class="relative">
-            <button type="button" class="grid h-10 w-10 place-items-center rounded-lg border border-white/10 bg-white/[0.06] text-mist hover:text-white" @click="settingsOpen = !settingsOpen">
+          <AppButton variant="ghost" @click="inviteOpen = true"><UserPlus class="h-4 w-4" />Convidar amigo</AppButton>
+          <div>
+            <button type="button" class="grid h-10 w-10 place-items-center rounded-lg border border-white/10 bg-white/[0.06] text-mist hover:text-white" @click="settingsOpen = true">
               <Settings class="h-5 w-5" />
             </button>
-            <div v-if="settingsOpen" class="absolute right-0 top-12 z-10 w-44 rounded-lg border border-white/10 bg-panel p-1 shadow-soft">
-              <button type="button" class="block w-full rounded-md px-3 py-2 text-left text-sm font-bold text-red-100 hover:bg-flare/15" @click="confirmDeleteOpen = true; settingsOpen = false">Apagar sala</button>
-            </div>
           </div>
         </div>
       </div>
     </section>
+
+    <TacticalMap
+      :room-id="data.room.id"
+      :model-value="data.room.mapJson"
+      :members="data.room.members"
+      :current-user-id="auth.user?.id"
+      :is-master="isMaster"
+      @saved="reloadTable"
+    />
 
     <section class="grid items-start gap-5 xl:grid-cols-[260px_minmax(0,1fr)_320px]">
       <aside class="space-y-4 xl:sticky xl:top-24">
@@ -271,10 +341,7 @@ onBeforeUnmount(() => {
               :class="{ 'opacity-55': !isOnline(member), 'border-flare/50 bg-flare/10': isDead(member) }"
             >
               <button type="button" class="flex w-full items-center gap-3 text-left" @click="openDm(member)">
-                <div class="relative grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-lg font-black text-white" :style="{ backgroundColor: `${memberColor(member.user?.id)}33` }">
-                  <img v-if="member.character?.avatarUrl" :src="member.character.avatarUrl" class="h-full w-full object-cover" :alt="member.character.name">
-                  <span v-else>{{ (member.character?.name || member.user?.name || '?').slice(0, 1) }}</span>
-                </div>
+                <AppAvatar :name="member.character?.name || member.user?.name" :src="member.character?.avatarUrl" :color="memberColor(member.user?.id)" />
                 <span class="min-w-0 flex-1">
                   <span class="flex items-center gap-1 truncate font-black text-white">
                     <Crown v-if="member.role === 'MASTER'" class="h-3.5 w-3.5 shrink-0 text-ember" />
@@ -358,6 +425,93 @@ onBeforeUnmount(() => {
       @close="confirmDeleteOpen = false"
       @confirm="deleteRoom"
     />
+    <Teleport to="body">
+      <div v-if="inviteOpen" class="fixed inset-0 z-50 grid place-items-end bg-black/60 p-0 sm:place-items-center sm:p-4" @click.self="inviteOpen = false">
+        <div class="max-h-[92vh] w-full overflow-y-auto border border-white/10 bg-panel p-5 shadow-soft sm:max-w-lg sm:rounded-lg">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <h2 class="text-xl font-black text-white">Convidar amigos</h2>
+              <p class="mt-1 text-sm text-mist">{{ data.room.name }}</p>
+            </div>
+            <button type="button" class="rounded-lg p-2 text-mist hover:bg-white/10 hover:text-white" @click="inviteOpen = false"><X class="h-5 w-5" /></button>
+          </div>
+          <label class="relative mt-4 block">
+            <Search class="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-mist" />
+            <input v-model="inviteSearch" class="input pl-9" placeholder="Buscar amigos">
+          </label>
+          <div class="mt-4 max-h-80 space-y-2 overflow-y-auto pr-1">
+            <label v-for="friend in availableFriends" :key="friend.id" class="soft-row flex cursor-pointer items-center gap-3 p-3">
+              <input type="checkbox" class="h-4 w-4 accent-ember" :checked="selectedInviteIds.has(friend.id)" @change="toggleInviteSelection(friend.id)">
+              <AppAvatar :name="friend.name" :src="friend.avatarUrl" :color="friend.profileColor" rounded="full" />
+              <span class="min-w-0">
+                <b class="block truncate text-white">{{ friend.name }}</b>
+                <span class="block truncate text-xs text-mist">{{ friend.username ? `@${friend.username}` : 'sem usuario publico' }}</span>
+              </span>
+            </label>
+            <EmptyState v-if="!availableFriends.length" title="Nenhum amigo disponivel" description="Amigos que ja estao na sessao ou nao correspondem a busca nao aparecem aqui." />
+          </div>
+          <div class="mt-5 flex flex-wrap justify-end gap-2">
+            <AppButton variant="ghost" @click="inviteOpen = false">Cancelar</AppButton>
+            <AppButton :loading="inviting" :disabled="selectedInviteIds.size === 0" @click="sendInvites">Enviar convite</AppButton>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+    <Teleport to="body">
+      <div v-if="settingsOpen" class="fixed inset-0 z-40 grid place-items-end bg-black/60 p-0 sm:place-items-center sm:p-4" @click.self="settingsOpen = false">
+        <div class="max-h-[92vh] w-full overflow-y-auto border border-white/10 bg-panel p-5 shadow-soft sm:max-w-lg sm:rounded-lg">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <h2 class="text-xl font-black text-white">Configuracoes da sessao</h2>
+              <p class="mt-1 text-sm text-mist">{{ data.room.name }} · Codigo {{ data.room.code }}</p>
+            </div>
+            <button type="button" class="rounded-lg p-2 text-mist hover:bg-white/10 hover:text-white" @click="settingsOpen = false">
+              <X class="h-5 w-5" />
+            </button>
+          </div>
+
+          <div class="mt-5 space-y-4">
+            <AppCard>
+              <h3 class="font-black text-white">Personagem nesta sessao</h3>
+              <p class="mt-1 text-sm text-mist">Escolha um personagem compativel com {{ data.room.system.name }}.</p>
+              <div class="mt-3 flex flex-col gap-2 sm:flex-row">
+                <select v-model="selectedCharacterId" class="select" :disabled="compatibleCharacters.length === 0">
+                  <option v-if="compatibleCharacters.length === 0" value="">Nenhum personagem compativel</option>
+                  <option v-for="character in compatibleCharacters" :key="character.id" :value="character.id">{{ character.name }}</option>
+                </select>
+                <AppButton :loading="settingsSaving" :disabled="!selectedCharacterId || selectedCharacterId === myCharacter?.id" @click="changeCharacter">Trocar</AppButton>
+              </div>
+            </AppCard>
+
+            <AppCard>
+              <h3 class="font-black text-white">Dados da sala</h3>
+              <dl class="mt-3 grid gap-3 text-sm text-mist sm:grid-cols-2">
+                <div><dt class="label">Sistema</dt><dd class="text-white">{{ data.room.system.name }}</dd></div>
+                <div><dt class="label">Status</dt><dd class="text-white">{{ sessionLabel }}</dd></div>
+                <div><dt class="label">Jogadores</dt><dd class="text-white">{{ sortedMembers.length }}</dd></div>
+                <div><dt class="label">Codigo</dt><dd class="text-white">{{ data.room.code }}</dd></div>
+              </dl>
+            </AppCard>
+
+            <AppCard v-if="isMaster">
+              <h3 class="font-black text-white">Opcoes do mestre</h3>
+              <div class="mt-3 flex flex-wrap gap-2">
+                <AppButton v-if="!activeSession" :loading="sessionLoading" @click="startSession">Iniciar sessao</AppButton>
+                <AppButton v-else variant="ghost" :loading="sessionLoading" @click="endSession">Encerrar sessao</AppButton>
+                <AppButton variant="danger" @click="confirmDeleteOpen = true">Apagar sala</AppButton>
+              </div>
+            </AppCard>
+
+            <AppCard>
+              <h3 class="font-black text-white">Acoes</h3>
+              <NuxtLink to="/app/rooms" class="mt-3 inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/10 px-3 text-sm font-bold text-mist hover:text-white">
+                <LogOut class="h-4 w-4" /> Sair da mesa
+              </NuxtLink>
+            </AppCard>
+          </div>
+        </div>
+      </div>
+    </Teleport>
     <Teleport to="body">
       <div v-if="viewingCharacter" class="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
         <div class="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-lg border border-white/10 bg-panel p-5 shadow-soft">

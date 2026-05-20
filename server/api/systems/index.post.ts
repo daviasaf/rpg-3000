@@ -6,6 +6,7 @@ import { slugify } from '../../utils/slug'
 import { jsonValue, nullableJsonValue } from '../../utils/json'
 import { readZodBody } from '../../utils/body'
 import { withPrismaErrors } from '../../utils/prismaErrors'
+import { publishSystemSnapshot } from '../../utils/community'
 
 async function createUniqueSlug(name: string) {
   const base = slugify(name) || 'sistema'
@@ -53,6 +54,10 @@ export default defineEventHandler(async (event) => {
     },
     include: { fields: { orderBy: { order: 'asc' } } }
   }))
+
+  if (input.visibility === 'PUBLIC') {
+    await publishSystemSnapshot(system.id, user.id)
+  }
 
   return { system }
 })

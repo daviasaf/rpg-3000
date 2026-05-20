@@ -5,7 +5,7 @@ import { prisma } from '../../../../utils/prisma'
 export default defineEventHandler(async (event) => {
   await requireAdmin(event)
   const id = getRouterParam(event, 'id') || ''
-  const body = await readBody<{ status?: 'PENDING' | 'APPROVED' | 'REJECTED' }>(event)
+  const body = await readBody<{ status?: 'PENDING' | 'APPROVED' | 'REJECTED'; reason?: string }>(event)
   const status = body?.status
   if (!status || !['PENDING', 'APPROVED', 'REJECTED'].includes(status)) {
     throw createError({ statusCode: 400, statusMessage: 'Status invalido.' })
@@ -13,7 +13,7 @@ export default defineEventHandler(async (event) => {
 
   const system = await prisma.system.update({
     where: { id },
-    data: { moderationStatus: status }
+    data: { moderationStatus: status, moderationReason: status === 'REJECTED' ? body.reason || null : null }
   })
 
   return { system }

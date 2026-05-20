@@ -232,7 +232,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <AppCard class="flex h-[620px] flex-col p-0">
+  <AppCard class="flex h-[min(620px,calc(100vh-220px))] min-h-[420px] flex-col overflow-hidden p-0 md:max-h-[620px]">
     <div class="border-b border-white/10 p-3">
       <div class="flex flex-wrap items-center gap-2">
         <button type="button" class="rounded-md px-3 py-2 text-sm font-black transition" :class="tab === 'TABLE' ? 'bg-ember text-black' : 'text-mist hover:bg-white/10 hover:text-white'" @click="tab = 'TABLE'">Mesa</button>
@@ -245,13 +245,13 @@ onBeforeUnmount(() => {
         <button v-if="tab === 'SECRET'" type="button" class="ml-auto grid h-8 w-8 place-items-center rounded-lg text-mist hover:bg-white/10 hover:text-white" title="Fechar rolagens secretas" @click="closeSecretChat">
           <X class="h-4 w-4" />
         </button>
-        <button v-if="dmUserId" type="button" :class="tab === 'SECRET' ? '' : 'ml-auto'" class="grid h-8 w-8 place-items-center rounded-lg text-mist hover:bg-white/10 hover:text-white" title="Fechar chat privado" @click="closePrivateChat">
+        <button v-if="dmUserId && tab === 'DM'" type="button" class="ml-auto grid h-8 w-8 place-items-center rounded-lg text-mist hover:bg-white/10 hover:text-white" title="Fechar chat privado" @click="closePrivateChat">
           <X class="h-4 w-4" />
         </button>
       </div>
     </div>
     <div class="relative min-h-0 flex-1 p-4">
-      <div ref="scroller" class="h-full min-h-[320px] space-y-3 overflow-y-auto pr-2" @scroll="updateJumpButton">
+      <div ref="scroller" class="h-full max-h-full min-h-0 space-y-3 overflow-y-auto pr-2" @scroll="updateJumpButton">
         <div
           v-for="message in visibleMessages"
           :key="message.id"
@@ -273,7 +273,7 @@ onBeforeUnmount(() => {
           >
             <MoreHorizontal class="h-5 w-5" />
           </button>
-          <div v-if="menuMessageId === message.id" class="absolute right-3 top-10 z-10 rounded-lg border border-white/10 bg-panel p-1 shadow-soft">
+          <div v-if="menuMessageId === message.id" class="absolute right-3 top-10 z-30 rounded-lg border border-white/10 bg-panel p-1 shadow-soft">
             <button type="button" class="block rounded-md px-3 py-2 text-left text-sm font-bold text-white hover:bg-white/10" @click="shareMessage(message)">
               Compartilhar
             </button>

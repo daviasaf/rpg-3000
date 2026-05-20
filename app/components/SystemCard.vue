@@ -8,6 +8,7 @@ defineProps<{
     visibility: string
     avatarUrl?: string | null
     moderationStatus?: string
+    moderationReason?: string | null
     createdBy?: { name: string } | null
     _count?: { characters: number; rooms: number }
   }
@@ -22,7 +23,7 @@ defineProps<{
           {{ tag }}
         </span>
       </div>
-      <span class="text-xs font-bold text-mist">
+      <span class="rounded-md border px-2 py-1 text-xs font-bold" :class="system.moderationStatus === 'REJECTED' ? 'border-flare/35 bg-flare/10 text-red-100' : 'border-white/10 bg-white/[0.04] text-mist'">
         {{ system.moderationStatus === 'PENDING' ? 'Em analise' : system.moderationStatus === 'REJECTED' ? 'Rejeitado' : system.visibility === 'PUBLIC' ? 'Publico' : 'Privado' }}
       </span>
     </div>
@@ -31,6 +32,9 @@ defineProps<{
       <h3 class="min-w-0 text-lg font-black text-white group-hover:text-ember">{{ system.name }}</h3>
     </div>
     <p class="mt-2 line-clamp-3 text-sm leading-6 text-mist">{{ system.description }}</p>
+    <p v-if="system.moderationStatus === 'REJECTED'" class="mt-3 rounded-md border border-flare/30 bg-flare/10 px-2 py-1 text-xs font-bold text-red-100">
+      {{ system.moderationReason || 'Bloqueado para edicao.' }}
+    </p>
     <div class="mt-4 flex items-center justify-between text-xs text-mist">
       <span>{{ system.createdBy?.name || 'Central RPG' }}</span>
       <span>{{ system._count?.characters ?? 0 }} fichas</span>

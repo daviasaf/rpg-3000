@@ -4,8 +4,9 @@ import { LogIn } from 'lucide-vue-next'
 definePageMeta({ layout: 'app', middleware: 'auth' })
 
 const { push, apiError } = useToast()
+const route = useRoute()
 const { data: characters } = await useFetch<{ characters: Array<{ id: string; name: string; system?: { name: string } }> }>('/api/characters')
-const form = reactive({ code: '', characterId: '' })
+const form = reactive({ code: String(route.query.code || ''), characterId: '' })
 const loading = ref(false)
 const hasCharacters = computed(() => Boolean(characters.value?.characters.length))
 
