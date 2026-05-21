@@ -17,9 +17,11 @@ const props = defineProps<{
   systems?: CreatedItem[]
   npcs?: CreatedItem[]
   characters?: CreatedItem[]
+  profileLikes?: { count: number; likedByMe: boolean }
+  likeLoading?: boolean
   ownProfile?: boolean
 }>()
-const emit = defineEmits<{ refresh: [] }>()
+const emit = defineEmits<{ refresh: [], toggleProfileLike: [] }>()
 const auth = useAuthStore()
 
 const publicItems = computed(() => [
@@ -27,6 +29,7 @@ const publicItems = computed(() => [
   ...(props.npcs || []),
   ...(props.characters || [])
 ])
+const likesCount = computed(() => props.profileLikes?.count || 0)
 
 function profileHandle(profile?: SocialUser) {
   return profile?.username ? `@${profile.username}` : 'usuario sem identificador publico'
@@ -46,6 +49,19 @@ function profileHandle(profile?: SocialUser) {
         </div>
         </div>
         <div class="flex flex-wrap gap-2">
+          <button
+            v-if="!ownProfile"
+            type="button"
+            class="inline-flex min-h-10 items-center gap-2 rounded-lg border px-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-60"
+            :class="profileLikes?.likedByMe ? 'border-ember bg-ember/15 text-ember' : 'border-white/10 bg-white/[0.04] text-white hover:border-ember/40'"
+            :disabled="likeLoading"
+            @click="emit('toggleProfileLike')"
+          >
+            <span v-if="likeLoading" class="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            <span v-else>♥</span>
+            {{ likesCount }}
+          </button>
+          <span v-else class="kbd-chip">{{ likesCount }} curtidas</span>
           <span class="kbd-chip">{{ publicItems.length }} criacoes</span>
           <span class="kbd-chip">{{ profileComments?.length || 0 }} comentarios</span>
         </div>
@@ -60,7 +76,7 @@ function profileHandle(profile?: SocialUser) {
             <AppAvatar :name="item.name" :src="item.avatarUrl" size="sm" />
             <span class="min-w-0"><b class="block truncate text-white">{{ item.name }}</b><span class="line-clamp-1 text-xs text-mist">{{ item.description || 'Sem descricao.' }}</span></span>
           </NuxtLink>
-          <p v-if="!systems?.length" class="text-sm text-mist">Nenhum sistema criado.</p>
+          <p v-if="!systems?.length" class="text-sm text-mist">Nenhum sistema destacado.</p>
         </div>
       </AppCard>
       <AppCard>
@@ -70,7 +86,7 @@ function profileHandle(profile?: SocialUser) {
             <AppAvatar :name="item.name" :src="item.avatarUrl" size="sm" />
             <span class="min-w-0"><b class="block truncate text-white">{{ item.name }}</b><span class="line-clamp-1 text-xs text-mist">{{ item.description || 'Sem descricao.' }}</span></span>
           </NuxtLink>
-          <p v-if="!npcs?.length" class="text-sm text-mist">Nenhum NPC criado.</p>
+          <p v-if="!npcs?.length" class="text-sm text-mist">Nenhum NPC destacado.</p>
         </div>
       </AppCard>
       <AppCard>
@@ -80,7 +96,7 @@ function profileHandle(profile?: SocialUser) {
             <AppAvatar :name="item.name" :src="item.avatarUrl" size="sm" />
             <span class="min-w-0"><b class="block truncate text-white">{{ item.name }}</b><span class="line-clamp-1 text-xs text-mist">{{ item.system?.name || item.description || 'Sem sistema.' }}</span></span>
           </NuxtLink>
-          <p v-if="!characters?.length" class="text-sm text-mist">Nenhum personagem criado.</p>
+          <p v-if="!characters?.length" class="text-sm text-mist">Nenhum personagem destacado.</p>
         </div>
       </AppCard>
     </section>

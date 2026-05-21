@@ -54,9 +54,6 @@ const emit = defineEmits<{
         <span class="label">Foto do personagem</span>
         <input :value="avatarUrl" class="input" type="url" placeholder="https://..." @input="emit('updateAvatar', ($event.target as HTMLInputElement).value)">
       </label>
-      <button v-if="avatarUrl" type="button" class="inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/10 px-3 text-sm font-bold text-mist hover:text-white" @click="emit('updateAvatar', '')">
-        <X class="h-4 w-4" />Remover foto
-      </button>
       <label>
         <span class="label">Descricao curta</span>
         <textarea :value="description" class="input min-h-20" @input="emit('updateDescription', ($event.target as HTMLTextAreaElement).value)" />

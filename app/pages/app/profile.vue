@@ -3,7 +3,7 @@ definePageMeta({ layout: 'app', middleware: 'auth' })
 
 const auth = useAuthStore()
 const { data, refresh } = await useFetch<any>(() => `/api/social/profile/${auth.user?.id || ''}`, {
-  default: () => ({ profile: auth.user, posts: [], profileComments: [], systems: [], npcs: [], characters: [], social: { isSelf: true } })
+  default: () => ({ profile: auth.user, posts: [], profileComments: [], systems: [], npcs: [], characters: [], profileLikes: { count: 0, likedByMe: false }, social: { isSelf: true } })
 })
 </script>
 
@@ -16,6 +16,7 @@ const { data, refresh } = await useFetch<any>(() => `/api/social/profile/${auth.
       :systems="data.systems"
       :npcs="data.npcs"
       :characters="data.characters"
+      :profile-likes="data.profileLikes"
       own-profile
       @refresh="refresh"
     />

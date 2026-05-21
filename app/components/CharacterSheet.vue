@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import { ChevronDown, Info } from 'lucide-vue-next'
+import { ChevronDown, Info, Plus, Trash2 } from 'lucide-vue-next'
 import type { DynamicField, SystemSchema } from '../../shared/types/system'
 import { classNotes, fieldSources } from '../utils/characterProgression'
+
+type ExtraField = { id: string; name: string; value: string }
+type SheetListItem = { id: string; name: string; description: string; damage?: string; skill?: string; extras?: ExtraField[] }
+type SheetTextBlock = { name: string; description: string }
 
 const props = defineProps<{
   character: {
@@ -40,9 +44,35 @@ const className = computed(() => {
   return props.character.system.schemaJson?.classes?.find((item) => item.key === classKey)?.name || classKey
 })
 const isRejected = computed(() => props.character.moderationStatus === 'REJECTED')
-const sheetTexts = computed(() => props.character.system.schemaJson?.sheetTexts || [])
+const sheetLists = computed(() => (props.character.system.schemaJson?.sheetLists || []).filter((list) => list.enabled !== false))
 const visibleClassNotes = computed(() => classNotes(props.character.system.schemaJson, draft))
 const selectedFieldSources = computed(() => sourceField.value ? fieldSources(sourceField.value, props.character.system.schemaJson, draft) : [])
+const defaultBuiltInSections = [
+  { key: 'items', title: 'Itens', multiple: true, damage: false, skill: false, extras: false },
+  { key: 'weapons', title: 'Armas', multiple: true, damage: true, skill: true, extras: false },
+  { key: 'traits', title: 'Tracos / Talentos', multiple: true, damage: false, skill: false, extras: false },
+  { key: 'powers', title: 'Poderes', multiple: true, damage: true, skill: false, extras: false },
+  { key: 'biography', title: 'Biografia', multiple: false, damage: false, skill: false, extras: false },
+  { key: 'appearance', title: 'Aparencia', multiple: false, damage: false, skill: false, extras: false },
+  { key: 'personality', title: 'Alinhamento / Personalidade', multiple: false, damage: false, skill: false, extras: false },
+  { key: 'conditions', title: 'Condicoes', multiple: true, damage: false, skill: false, extras: false }
+]
+const builtInSections = computed(() => {
+  const configured = props.character.system.schemaJson?.sheetSections
+  if (!configured?.length) return defaultBuiltInSections
+
+  return configured
+    .filter((section) => section.enabled !== false)
+    .map((section) => ({
+      key: section.key,
+      title: section.title,
+      multiple: Boolean(section.multiple),
+      damage: Boolean(section.allowDamage),
+      skill: Boolean(section.allowSkill),
+      extras: Boolean(section.allowExtras)
+    }))
+})
+const rulesMarkdown = computed(() => props.character.system.schemaJson?.rulesMarkdown || '')
 
 const groups = computed(() => {
   const order = ['ATTRIBUTE', 'RESOURCE', 'SKILL', 'TEXT_FIELD', 'NUMERIC_FIELD', 'BOOLEAN_FIELD', 'LIST_FIELD', 'FORMULA', 'ROLL_RULE', 'STATUS_BAR']
@@ -79,6 +109,60 @@ function toggleGroup(category: string) {
   if (next.has(category)) next.delete(category)
   else next.add(category)
   openGroups.value = next
+}
+
+function uid(prefix: string) {
+  return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`
+}
+
+function listItems(key: string): SheetListItem[] {
+  if (!Array.isArray(draft[key])) draft[key] = []
+  return draft[key] as SheetListItem[]
+}
+
+function singleBlock(key: string): SheetTextBlock {
+  if (!draft[key] || typeof draft[key] !== 'object' || Array.isArray(draft[key])) {
+    draft[key] = { name: '', description: '' }
+  }
+  return draft[key] as SheetTextBlock
+}
+
+function addListItem(key: string) {
+  listItems(key).push({ id: uid(key), name: '', description: '', damage: '', skill: '', extras: [] })
+}
+
+function removeListItem(key: string, index: number) {
+  listItems(key).splice(index, 1)
+}
+
+function addExtra(item: SheetListItem) {
+  item.extras ||= []
+  item.extras.push({ id: uid('extra'), name: '', value: '' })
+}
+
+function removeExtra(item: SheetListItem, index: number) {
+  item.extras?.splice(index, 1)
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+function renderMarkdown(value: unknown) {
+  const escaped = escapeHtml(String(value || ''))
+  return escaped
+    .replace(/^### (.*)$/gm, '<h4>$1</h4>')
+    .replace(/^## (.*)$/gm, '<h3>$1</h3>')
+    .replace(/^# (.*)$/gm, '<h2>$1</h2>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\n/g, '<br>')
 }
 
 function sourceItems() {
@@ -170,16 +254,6 @@ onBeforeUnmount(() => {
     />
 
     <div class="space-y-5">
-      <AppCard v-if="sheetTexts.length">
-        <h2 class="text-lg font-black text-white">Textos da ficha</h2>
-        <div class="mt-3 grid gap-3 md:grid-cols-2">
-          <div v-for="item in sheetTexts" :key="item.id || item.name" class="rounded-lg border border-white/10 bg-white/[0.04] p-3">
-            <p class="text-xs font-black uppercase tracking-[0.12em] text-ember">{{ item.name }}</p>
-            <p class="mt-2 text-sm leading-6 text-mist">{{ item.text }}</p>
-          </div>
-        </div>
-      </AppCard>
-
       <AppCard v-if="visibleClassNotes.length" class="border-ember/25 bg-ember/5">
         <h2 class="text-lg font-black text-white">Textos da classe</h2>
         <div class="mt-3 space-y-2">
@@ -195,12 +269,130 @@ onBeforeUnmount(() => {
           <ChevronDown class="h-5 w-5 text-ember transition" :class="isGroupOpen(group.category) ? 'rotate-180' : ''" />
         </button>
         <div v-if="isGroupOpen(group.category)" class="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <div v-for="field in group.fields" :key="field.key" class="relative" :class="field.type === 'TEXT' ? 'md:col-span-2 xl:col-span-3' : ''">
-            <div class="absolute right-0 top-0 z-10">
-              <AppActionMenu title="Detalhes do campo" :items="sourceItems()" @select="handleFieldAction(field, $event)" />
+          <div v-for="field in group.fields" :key="field.key" class="space-y-2" :class="field.type === 'TEXT' ? 'md:col-span-2 xl:col-span-3' : ''">
+            <div class="flex justify-end">
+              <AppActionMenu title="Detalhes do campo" :items="sourceItems()" trigger-class="grid h-8 w-8 place-items-center rounded-lg border border-white/10 bg-white/[0.04] text-mist hover:text-white" @select="handleFieldAction(field, $event)" />
             </div>
             <DynamicFieldRenderer v-model="draft[field.key]" :field="field" :readonly="!editable" />
           </div>
+        </div>
+      </AppCard>
+
+      <AppCard v-for="section in builtInSections" :key="section.key">
+        <button type="button" class="flex w-full items-center justify-between gap-3 text-left" @click="toggleGroup(`builtin:${section.key}`)">
+          <h2 class="text-lg font-black text-white">{{ section.title }}</h2>
+          <ChevronDown class="h-5 w-5 text-ember transition" :class="isGroupOpen(`builtin:${section.key}`) ? 'rotate-180' : ''" />
+        </button>
+        <div v-if="isGroupOpen(`builtin:${section.key}`)" class="mt-4">
+          <div v-if="section.multiple" class="space-y-3">
+            <div
+              v-for="(item, index) in listItems(section.key)"
+              :key="item.id || index"
+              class="rounded-lg border border-white/10 bg-white/[0.04] p-3"
+            >
+              <div class="grid gap-3 md:grid-cols-[1fr_160px_160px_auto]">
+                <label>
+                  <span class="label">Nome</span>
+                  <input v-model="item.name" class="input" :readonly="!editable" placeholder="Nome">
+                </label>
+                <label v-if="section.damage">
+                  <span class="label">Dano</span>
+                  <input v-model="item.damage" class="input" :readonly="!editable" placeholder="1d8">
+                </label>
+                <label v-if="section.skill">
+                  <span class="label">Habilidade</span>
+                  <input v-model="item.skill" class="input" :readonly="!editable" placeholder="Opcional">
+                </label>
+                <button v-if="editable" type="button" class="self-end rounded-lg border border-flare/30 p-3 text-flare hover:bg-flare/10" title="Remover" @click="removeListItem(section.key, index)">
+                  <Trash2 class="h-4 w-4" />
+                </button>
+                <label class="md:col-span-4">
+                  <span class="label">Texto / descricao</span>
+                  <textarea v-model="item.description" rows="3" class="input" :readonly="!editable" />
+                </label>
+              </div>
+            </div>
+            <button v-if="editable" type="button" class="inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/10 px-3 text-sm font-bold text-white hover:border-ember/40" @click="addListItem(section.key)">
+              <Plus class="h-4 w-4" />Adicionar
+            </button>
+            <p v-if="!listItems(section.key).length" class="rounded-lg border border-dashed border-white/15 p-4 text-sm text-mist">Nada cadastrado nesta secao.</p>
+          </div>
+
+          <div v-else class="grid gap-3">
+            <label>
+              <span class="label">Nome</span>
+              <input v-model="singleBlock(section.key).name" class="input" :readonly="!editable" placeholder="Titulo opcional">
+            </label>
+            <label>
+              <span class="label">Texto / descricao</span>
+              <textarea v-model="singleBlock(section.key).description" rows="5" class="input" :readonly="!editable" />
+            </label>
+          </div>
+        </div>
+      </AppCard>
+
+      <AppCard v-for="list in sheetLists" :key="list.id || list.key">
+        <button type="button" class="flex w-full items-center justify-between gap-3 text-left" @click="toggleGroup(`custom:${list.key}`)">
+          <span>
+            <h2 class="text-lg font-black text-white">{{ list.name }}</h2>
+            <p v-if="list.description" class="mt-1 text-sm text-mist">{{ list.description }}</p>
+          </span>
+          <ChevronDown class="h-5 w-5 text-ember transition" :class="isGroupOpen(`custom:${list.key}`) ? 'rotate-180' : ''" />
+        </button>
+        <div v-if="isGroupOpen(`custom:${list.key}`)" class="mt-4 space-y-3">
+          <div
+            v-for="(item, index) in listItems(list.key)"
+            :key="item.id || index"
+            class="rounded-lg border border-white/10 bg-white/[0.04] p-3"
+          >
+            <div class="grid gap-3 md:grid-cols-[1fr_150px_150px_auto]">
+              <label>
+                <span class="label">Nome</span>
+                <input v-model="item.name" class="input" :readonly="!editable" placeholder="Katana, bola de fogo...">
+              </label>
+              <label v-if="list.allowDamage">
+                <span class="label">Dano fixo</span>
+                <input v-model="item.damage" class="input" :readonly="!editable" placeholder="1d8">
+              </label>
+              <label v-if="list.allowSkill">
+                <span class="label">Habilidade</span>
+                <input v-model="item.skill" class="input" :readonly="!editable" placeholder="Opcional">
+              </label>
+              <button v-if="editable" type="button" class="self-end rounded-lg border border-flare/30 p-3 text-flare hover:bg-flare/10" title="Remover item" @click="removeListItem(list.key, index)">
+                <Trash2 class="h-4 w-4" />
+              </button>
+              <label class="md:col-span-4">
+                <span class="label">Descricao longa</span>
+                <textarea v-model="item.description" rows="4" class="input" :readonly="!editable" />
+              </label>
+            </div>
+            <div v-if="list.allowExtras" class="mt-3 space-y-2">
+              <div v-for="(extra, extraIndex) in item.extras || []" :key="extra.id || extraIndex" class="grid gap-2 md:grid-cols-[180px_1fr_auto]">
+                <input v-model="extra.name" class="input" :readonly="!editable" placeholder="Campo extra">
+                <input v-model="extra.value" class="input" :readonly="!editable" placeholder="Valor ou texto">
+                <button v-if="editable" type="button" class="rounded-lg border border-flare/30 p-3 text-flare hover:bg-flare/10" title="Remover campo extra" @click="removeExtra(item, extraIndex)">
+                  <Trash2 class="h-4 w-4" />
+                </button>
+              </div>
+              <button v-if="editable" type="button" class="inline-flex min-h-9 items-center gap-2 rounded-lg border border-white/10 px-3 text-xs font-bold text-white hover:border-ember/40" @click="addExtra(item)">
+                <Plus class="h-4 w-4" />Campo extra
+              </button>
+            </div>
+          </div>
+          <button v-if="editable" type="button" class="inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/10 px-3 text-sm font-bold text-white hover:border-ember/40" @click="addListItem(list.key)">
+            <Plus class="h-4 w-4" />Adicionar {{ list.name }}
+          </button>
+          <p v-if="!listItems(list.key).length" class="rounded-lg border border-dashed border-white/15 p-4 text-sm text-mist">Nenhum item nesta lista.</p>
+        </div>
+      </AppCard>
+
+      <AppCard v-if="rulesMarkdown">
+        <button type="button" class="flex w-full items-center justify-between gap-3 text-left" @click="toggleGroup('rulesMarkdown')">
+          <h2 class="text-lg font-black text-white">Regras gerais</h2>
+          <ChevronDown class="h-5 w-5 text-ember transition" :class="isGroupOpen('rulesMarkdown') ? 'rotate-180' : ''" />
+        </button>
+        <div v-if="isGroupOpen('rulesMarkdown')" class="mt-4 rounded-lg border border-white/10 bg-white/[0.04] p-4 text-sm leading-6 text-mist">
+          <div class="markdown-preview" v-html="renderMarkdown(rulesMarkdown)" />
         </div>
       </AppCard>
     </div>
@@ -227,3 +419,21 @@ onBeforeUnmount(() => {
     </Teleport>
   </div>
 </template>
+
+<style scoped>
+.markdown-preview :deep(h2),
+.markdown-preview :deep(h3),
+.markdown-preview :deep(h4) {
+  margin: 0.75rem 0 0.35rem;
+  color: white;
+  font-weight: 900;
+}
+
+.markdown-preview :deep(code) {
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 0.35rem;
+  background: rgb(255 255 255 / 0.06);
+  padding: 0.05rem 0.3rem;
+  color: var(--color-ember, #ff8a13);
+}
+</style>

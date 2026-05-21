@@ -5,7 +5,24 @@ import type { DynamicField, FieldCategory, FieldType, SystemClass, SystemClassLe
 const fields = defineModel<DynamicField[]>('fields', { required: true })
 const schema = defineModel<SystemSchema>('schema', { required: true })
 
-const steps = ['Informacoes', 'Regras de nivel', 'Atributos', 'Recursos', 'Pericias', 'Classes', 'Textos da ficha', 'Rolagens', 'Preview', 'Publicar']
+const builtInSectionDefinitions = [
+  { key: 'items', title: 'Itens', multiple: true, longText: false, allowDamage: false, allowSkill: false, allowExtras: false },
+  { key: 'weapons', title: 'Armas', multiple: true, longText: false, allowDamage: true, allowSkill: true, allowExtras: false },
+  { key: 'traits', title: 'Tracos / Talentos', multiple: true, longText: false, allowDamage: false, allowSkill: false, allowExtras: false },
+  { key: 'powers', title: 'Poderes', multiple: true, longText: false, allowDamage: true, allowSkill: false, allowExtras: false },
+  { key: 'biography', title: 'Biografia', multiple: false, longText: true, allowDamage: false, allowSkill: false, allowExtras: false },
+  { key: 'appearance', title: 'Aparencia', multiple: false, longText: true, allowDamage: false, allowSkill: false, allowExtras: false },
+  { key: 'personality', title: 'Alinhamento / Personalidade', multiple: false, longText: true, allowDamage: false, allowSkill: false, allowExtras: false },
+  { key: 'conditions', title: 'Condicoes', multiple: true, longText: false, allowDamage: false, allowSkill: false, allowExtras: false }
+]
+
+const specialListDefinitions = [
+  { key: 'equipment', name: 'Lista de equipamentos', description: 'Equipamentos, ferramentas, armaduras e itens carregados pelo personagem.', enabled: true, allowDamage: true, allowSkill: false, allowExtras: true },
+  { key: 'spells', name: 'Lista de magias', description: 'Magias, tecnicas ou efeitos sobrenaturais com custo, alcance e campos extras.', enabled: true, allowDamage: true, allowSkill: true, allowExtras: true }
+]
+
+const sectionSteps = builtInSectionDefinitions.map((section) => section.title)
+const steps = ['Informacoes', 'Regras de nivel', 'Atributos', 'Recursos', 'Pericias', 'Classes', ...sectionSteps, 'Regras gerais', 'Lista de equipamentos', 'Lista de magias', 'Lista personalizada', 'Rolagens', 'Preview', 'Publicar']
 const current = ref(0)
 
 const categories: Record<string, FieldCategory> = {
@@ -17,6 +34,8 @@ const categories: Record<string, FieldCategory> = {
 
 const currentStep = computed(() => steps[current.value] || 'Informacoes')
 const currentCategory = computed(() => categories[currentStep.value])
+const currentBuiltInDefinition = computed(() => builtInSectionDefinitions.find((section) => section.title === currentStep.value))
+const currentBuiltInSection = computed(() => currentBuiltInDefinition.value ? schema.value.sheetSections?.find((section) => section.key === currentBuiltInDefinition.value?.key) : undefined)
 const classTargets = computed(() => fields.value.filter((field) => field.type === 'NUMBER' && ['ATTRIBUTE', 'SKILL', 'RESOURCE', 'STATUS_BAR', 'NUMERIC_FIELD'].includes(field.category)))
 const classes = computed(() => schema.value.classes || [])
 
@@ -33,6 +52,21 @@ if (!schema.value.leveling) {
 if (!schema.value.sheetTexts) {
   schema.value.sheetTexts = []
 }
+
+if (!schema.value.sheetLists) {
+  schema.value.sheetLists = []
+}
+
+if (!schema.value.sheetSections) {
+  schema.value.sheetSections = []
+}
+
+if (!schema.value.rulesMarkdown) {
+  schema.value.rulesMarkdown = ''
+}
+
+ensureDefaultSections()
+ensureSpecialLists()
 
 function keyFromLabel(label: string) {
   return label
@@ -74,6 +108,83 @@ function addSheetText() {
 
 function removeSheetText(index: number) {
   schema.value.sheetTexts?.splice(index, 1)
+}
+
+function addSheetList() {
+  schema.value.sheetLists ||= []
+  const nextIndex = schema.value.sheetLists.length + 1
+  schema.value.sheetLists.push({
+    id: `sheet_list_${Date.now()}_${nextIndex}`,
+    key: `lista_${nextIndex}`,
+    name: `Lista ${nextIndex}`,
+    description: '',
+    allowDamage: true,
+    allowSkill: false,
+    allowExtras: true,
+    enabled: true
+  })
+}
+
+function removeSheetList(index: number) {
+  schema.value.sheetLists?.splice(index, 1)
+}
+
+function ensureDefaultSections() {
+  schema.value.sheetSections ||= []
+  for (const definition of builtInSectionDefinitions) {
+    const existing = schema.value.sheetSections.find((section) => section.key === definition.key)
+    if (existing) {
+      existing.title ||= definition.title
+      existing.multiple = definition.multiple
+      existing.longText = definition.longText
+      existing.allowDamage = definition.allowDamage
+      existing.allowSkill = definition.allowSkill
+      existing.allowExtras = definition.allowExtras
+      existing.enabled = existing.enabled !== false
+    } else {
+      schema.value.sheetSections.push({ id: `section_${definition.key}`, enabled: true, ...definition })
+    }
+  }
+}
+
+function ensureSpecialLists() {
+  schema.value.sheetLists ||= []
+  for (const definition of specialListDefinitions) {
+    const existing = schema.value.sheetLists.find((list) => list.key === definition.key)
+    if (existing) {
+      existing.enabled = existing.enabled !== false
+      existing.allowDamage = existing.allowDamage ?? definition.allowDamage
+      existing.allowSkill = existing.allowSkill ?? definition.allowSkill
+      existing.allowExtras = existing.allowExtras ?? definition.allowExtras
+    } else {
+      schema.value.sheetLists.push({ id: `sheet_list_${definition.key}`, ...definition })
+    }
+  }
+}
+
+function sheetListByKey(key: string) {
+  ensureSpecialLists()
+  return schema.value.sheetLists?.find((list) => list.key === key)
+}
+
+function customSheetLists() {
+  ensureSpecialLists()
+  return schema.value.sheetLists?.filter((list) => !specialListDefinitions.some((definition) => definition.key === list.key)) || []
+}
+
+function addCustomSheetList() {
+  schema.value.sheetLists ||= []
+  const nextIndex = customSheetLists().length + 1
+  schema.value.sheetLists.push({
+    id: `sheet_list_custom_${Date.now()}_${nextIndex}`,
+    key: `lista_personalizada_${nextIndex}`,
+    name: `Lista personalizada ${nextIndex}`,
+    description: '',
+    enabled: true,
+    allowDamage: false,
+    allowSkill: false,
+    allowExtras: true
+  })
 }
 
 function filtered(category: FieldCategory) {
@@ -290,35 +401,167 @@ function categoryLabel(category: string) {
       </div>
     </AppCard>
 
-    <AppCard v-else-if="currentStep === 'Textos da ficha'">
+    <AppCard v-else-if="currentBuiltInSection">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 class="text-xl font-black text-white">{{ currentBuiltInSection.title }}</h2>
+          <p class="muted mt-1">Esta aba define se essa secao existe na ficha e quais campos o jogador podera preencher.</p>
+        </div>
+        <label class="inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-sm font-bold text-white">
+          <input v-model="currentBuiltInSection.enabled" type="checkbox" class="accent-[var(--user-accent)]">
+          Usar na ficha
+        </label>
+      </div>
+
+      <div class="mt-5 grid gap-4 md:grid-cols-2">
+        <label>
+          <span class="label">Nome da aba na ficha</span>
+          <input v-model="currentBuiltInSection.title" class="input">
+        </label>
+        <label>
+          <span class="label">Chave interna</span>
+          <input v-model="currentBuiltInSection.key" class="input" readonly>
+        </label>
+      </div>
+
+      <div class="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <span class="soft-row p-3 text-sm text-mist">
+          <b class="block text-white">Nome</b>
+          Campo padrao sempre presente.
+        </span>
+        <span class="soft-row p-3 text-sm text-mist">
+          <b class="block text-white">Texto / descricao</b>
+          {{ currentBuiltInSection.longText ? 'Campo longo para texto de ficha.' : 'Campo de descricao.' }}
+        </span>
+        <label v-if="currentBuiltInSection.allowDamage" class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white">
+          <input v-model="currentBuiltInSection.allowDamage" type="checkbox" class="accent-[var(--user-accent)]">
+          Dano
+        </label>
+        <label v-if="currentBuiltInSection.allowSkill" class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white">
+          <input v-model="currentBuiltInSection.allowSkill" type="checkbox" class="accent-[var(--user-accent)]">
+          Habilidade opcional
+        </label>
+      </div>
+
+      <div class="mt-5 rounded-lg border border-white/10 bg-white/[0.04] p-4">
+        <p class="text-xs font-black uppercase tracking-[0.12em] text-ember">Como ficara para o jogador</p>
+        <p class="mt-2 text-sm leading-6 text-mist">
+          {{ currentBuiltInSection.multiple ? 'O jogador podera adicionar varios registros nesta secao.' : 'O jogador preenchera um bloco unico desta secao.' }}
+          A estrutura vem deste sistema; a ficha apenas salva os valores preenchidos pelo personagem.
+        </p>
+      </div>
+    </AppCard>
+
+    <AppCard v-else-if="currentStep === 'Regras gerais'">
+      <h2 class="text-xl font-black text-white">Regras gerais</h2>
+      <p class="muted mt-1">Texto do sistema para regras, combate, magia, dano e observacoes. Na ficha ele aparece como leitura, sem ser um campo pessoal do personagem.</p>
+      <label class="mt-5 block">
+        <span class="label">Markdown do sistema</span>
+        <textarea v-model="schema.rulesMarkdown" rows="12" class="input" placeholder="# Combate&#10;Use este espaco para regras gerais do sistema." />
+      </label>
+    </AppCard>
+
+    <AppCard v-else-if="currentStep === 'Lista de equipamentos' && sheetListByKey('equipment')">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 class="text-xl font-black text-white">Lista de equipamentos</h2>
+          <p class="muted mt-1">Configure a lista de equipamentos que a ficha do personagem podera preencher.</p>
+        </div>
+        <label class="inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-sm font-bold text-white">
+          <input v-model="sheetListByKey('equipment')!.enabled" type="checkbox" class="accent-[var(--user-accent)]">
+          Usar na ficha
+        </label>
+      </div>
+      <div class="mt-5 grid gap-4 md:grid-cols-2">
+        <label>
+          <span class="label">Nome da lista</span>
+          <input v-model="sheetListByKey('equipment')!.name" class="input">
+        </label>
+        <label>
+          <span class="label">Chave interna</span>
+          <input v-model="sheetListByKey('equipment')!.key" class="input" readonly>
+        </label>
+        <label class="md:col-span-2">
+          <span class="label">Descricao</span>
+          <textarea v-model="sheetListByKey('equipment')!.description" rows="3" class="input" />
+        </label>
+      </div>
+      <div class="mt-3 grid gap-2 sm:grid-cols-3">
+        <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="sheetListByKey('equipment')!.allowDamage" type="checkbox" class="accent-[var(--user-accent)]">Dano fixo</label>
+        <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="sheetListByKey('equipment')!.allowSkill" type="checkbox" class="accent-[var(--user-accent)]">Habilidade</label>
+        <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="sheetListByKey('equipment')!.allowExtras" type="checkbox" class="accent-[var(--user-accent)]">Campos extras com +</label>
+      </div>
+    </AppCard>
+
+    <AppCard v-else-if="currentStep === 'Lista de magias' && sheetListByKey('spells')">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 class="text-xl font-black text-white">Lista de magias</h2>
+          <p class="muted mt-1">Configure a lista de magias, tecnicas ou poderes especiais da ficha.</p>
+        </div>
+        <label class="inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-sm font-bold text-white">
+          <input v-model="sheetListByKey('spells')!.enabled" type="checkbox" class="accent-[var(--user-accent)]">
+          Usar na ficha
+        </label>
+      </div>
+      <div class="mt-5 grid gap-4 md:grid-cols-2">
+        <label>
+          <span class="label">Nome da lista</span>
+          <input v-model="sheetListByKey('spells')!.name" class="input">
+        </label>
+        <label>
+          <span class="label">Chave interna</span>
+          <input v-model="sheetListByKey('spells')!.key" class="input" readonly>
+        </label>
+        <label class="md:col-span-2">
+          <span class="label">Descricao</span>
+          <textarea v-model="sheetListByKey('spells')!.description" rows="3" class="input" />
+        </label>
+      </div>
+      <div class="mt-3 grid gap-2 sm:grid-cols-3">
+        <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="sheetListByKey('spells')!.allowDamage" type="checkbox" class="accent-[var(--user-accent)]">Dano</label>
+        <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="sheetListByKey('spells')!.allowSkill" type="checkbox" class="accent-[var(--user-accent)]">Custo / alcance / habilidade</label>
+        <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="sheetListByKey('spells')!.allowExtras" type="checkbox" class="accent-[var(--user-accent)]">Campos extras com +</label>
+      </div>
+    </AppCard>
+
+    <AppCard v-else-if="currentStep === 'Lista personalizada'">
       <div class="flex items-center justify-between gap-3">
         <div>
-          <h2 class="text-xl font-black text-white">Textos da ficha</h2>
-          <p class="muted">Textos fixos do sistema exibidos na ficha. Use apenas nome e texto.</p>
+          <h2 class="text-xl font-black text-white">Lista personalizada / Outro</h2>
+          <p class="muted">Adicione listas proprias do sistema, sem prender a ficha a um RPG especifico.</p>
         </div>
-        <AppButton type="button" @click="addSheetText"><Plus class="h-4 w-4" />Adicionar</AppButton>
+        <AppButton type="button" @click="addCustomSheetList"><Plus class="h-4 w-4" />Adicionar lista</AppButton>
       </div>
 
       <div class="mt-5 space-y-3">
-        <div
-          v-for="(item, index) in schema.sheetTexts"
-          :key="item.id || index"
-          class="grid gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-3 md:grid-cols-[220px_1fr_auto]"
-        >
-          <label>
-            <span class="label">Nome</span>
-            <input v-model="item.name" class="input" placeholder="Origem">
-          </label>
-          <label>
-            <span class="label">Texto</span>
-            <textarea v-model="item.text" rows="2" class="input" placeholder="Cla Mitsudaira" />
-          </label>
-          <button type="button" class="self-end rounded-lg border border-flare/30 p-3 text-flare hover:bg-flare/10" title="Remover texto" @click="removeSheetText(index)">
-            <Trash2 class="h-4 w-4" />
-          </button>
+        <div v-for="(item, index) in customSheetLists()" :key="item.id || item.key" class="rounded-lg border border-white/10 bg-white/[0.04] p-3">
+          <div class="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+            <label>
+              <span class="label">Nome</span>
+              <input v-model="item.name" class="input" placeholder="Lista de reputacoes" @blur="item.key = item.key || keyFromLabel(item.name)">
+            </label>
+            <label>
+              <span class="label">Chave</span>
+              <input v-model="item.key" class="input">
+            </label>
+            <button type="button" class="self-end rounded-lg border border-flare/30 p-3 text-flare hover:bg-flare/10" title="Remover lista" @click="removeSheetList((schema.sheetLists || []).findIndex((list) => list === item))">
+              <Trash2 class="h-4 w-4" />
+            </button>
+            <label class="md:col-span-3">
+              <span class="label">Descricao</span>
+              <textarea v-model="item.description" rows="2" class="input" />
+            </label>
+          </div>
+          <div class="mt-3 grid gap-2 sm:grid-cols-3">
+            <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="item.enabled" type="checkbox" class="accent-[var(--user-accent)]">Usar na ficha</label>
+            <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="item.allowDamage" type="checkbox" class="accent-[var(--user-accent)]">Dano</label>
+            <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="item.allowSkill" type="checkbox" class="accent-[var(--user-accent)]">Habilidade</label>
+            <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="item.allowExtras" type="checkbox" class="accent-[var(--user-accent)]">Campos extras com +</label>
+          </div>
         </div>
-        <div v-if="!schema.sheetTexts?.length" class="rounded-lg border border-dashed border-white/15 p-8 text-center text-mist">
-          Nenhum texto fixo na ficha ainda.
+        <div v-if="!customSheetLists().length" class="rounded-lg border border-dashed border-white/15 p-8 text-center text-mist">
+          Nenhuma lista personalizada ainda.
         </div>
       </div>
     </AppCard>
@@ -437,12 +680,25 @@ function categoryLabel(category: string) {
           </div>
         </div>
       </div>
-      <div v-if="schema.sheetTexts?.length" class="mt-5">
-        <h3 class="text-lg font-black text-white">Textos da ficha</h3>
+      <div v-if="schema.sheetSections?.length" class="mt-5">
+        <h3 class="text-lg font-black text-white">Secoes da ficha</h3>
         <div class="mt-3 grid gap-4 md:grid-cols-2">
-          <div v-for="item in schema.sheetTexts" :key="item.id || item.name" class="rounded-lg border border-white/10 bg-white/[0.04] p-3">
+          <div v-for="item in schema.sheetSections.filter((section) => section.enabled !== false)" :key="item.id || item.key" class="rounded-lg border border-white/10 bg-white/[0.04] p-3">
+            <p class="font-black text-white">{{ item.title }}</p>
+            <p class="mt-1 text-sm leading-6 text-mist">{{ item.multiple ? 'Lista preenchida pelo jogador.' : 'Bloco unico preenchido pelo jogador.' }}</p>
+          </div>
+        </div>
+      </div>
+      <div v-if="schema.rulesMarkdown" class="mt-5 rounded-lg border border-white/10 bg-white/[0.04] p-3">
+        <h3 class="text-lg font-black text-white">Regras gerais</h3>
+        <p class="mt-1 text-sm text-mist">Texto Markdown definido no sistema para leitura na ficha.</p>
+      </div>
+      <div v-if="schema.sheetLists?.some((list) => list.enabled !== false)" class="mt-5">
+        <h3 class="text-lg font-black text-white">Listas especiais</h3>
+        <div class="mt-3 grid gap-4 md:grid-cols-2">
+          <div v-for="item in schema.sheetLists.filter((list) => list.enabled !== false)" :key="item.id || item.key" class="rounded-lg border border-white/10 bg-white/[0.04] p-3">
             <p class="font-black text-white">{{ item.name }}</p>
-            <p class="mt-1 text-sm leading-6 text-mist">{{ item.text || 'Sem texto.' }}</p>
+            <p class="mt-1 text-sm leading-6 text-mist">{{ item.description || 'Lista editavel na ficha.' }}</p>
           </div>
         </div>
       </div>

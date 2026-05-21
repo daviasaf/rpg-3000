@@ -10,6 +10,9 @@ type CommunityPost = {
   description?: string | null
   avatarUrl?: string | null
   tags: string[]
+  originalSystemId?: string | null
+  originalNpcId?: string | null
+  originalCharacterId?: string | null
   systemName?: string | null
   snapshotJson: Record<string, any>
   author?: { id: string; name: string; avatarUrl?: string | null; profileColor?: string | null } | null
@@ -27,6 +30,7 @@ const search = ref('')
 const expanded = ref(new Set<string>())
 const addingId = ref('')
 const deletingId = ref('')
+const likingId = ref('')
 const pendingDeletePost = ref<CommunityPost | null>(null)
 const { data, refresh } = await useFetch<{ posts: CommunityPost[] }>('/api/community', { default: () => ({ posts: [] }) })
 
@@ -69,6 +73,13 @@ function postActionItems(post: CommunityPost) {
   ]
 }
 
+function postUrl(post: CommunityPost) {
+  if (post.type === 'SYSTEM' && post.originalSystemId) return `/app/systems/${post.originalSystemId}`
+  if (post.type === 'NPC' && post.originalNpcId) return `/app/npcs/${post.originalNpcId}`
+  if (post.type === 'CHARACTER' && post.originalCharacterId) return `/app/characters/${post.originalCharacterId}`
+  return ''
+}
+
 function handlePostAction(post: CommunityPost, action: string) {
   if (action === 'delete') {
     pendingDeletePost.value = post
@@ -76,16 +87,27 @@ function handlePostAction(post: CommunityPost, action: string) {
 }
 
 async function like(id: string) {
+  if (likingId.value) {
+    push('Aguarde um instante antes de tentar novamente.', 'info')
+    return
+  }
+  likingId.value = id
   try {
     const response = await $fetch<{ liked: boolean }>(`/api/community/${id}/like`, { method: 'POST' })
     push(response.liked ? 'Curtida adicionada.' : 'Curtida removida.', 'success')
     await refresh()
   } catch (error) {
     apiError(error, 'Nao foi possivel curtir.')
+  } finally {
+    likingId.value = ''
   }
 }
 
 async function clonePost(id: string, type: CommunityPost['type']) {
+  if (addingId.value) {
+    push('Essa acao ja esta sendo processada.', 'info')
+    return
+  }
   addingId.value = id
   try {
     await $fetch(`/api/community/${id}/clone`, { method: 'POST' })
@@ -132,14 +154,22 @@ async function deletePost() {
     <section class="space-y-4">
       <AppCard v-for="post in visiblePosts" :id="`post-${post.id}`" :key="post.id" class="transition hover:border-ember/30">
         <div class="flex flex-wrap items-start justify-between gap-3">
-          <button type="button" class="min-w-0 flex-1 text-left" @click="toggle(post.id)">
+          <div class="min-w-0 flex-1 cursor-pointer text-left" role="button" tabindex="0" @click="toggle(post.id)" @keydown.enter.prevent="toggle(post.id)" @keydown.space.prevent="toggle(post.id)">
             <p class="flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-ember">
               <component :is="typeIcon(post.type)" class="h-4 w-4" />{{ typeLabel(post.type) }}
             </p>
-            <span class="mt-1 block text-xl font-black text-white hover:text-ember">{{ post.title }}</span>
+            <NuxtLink
+              v-if="postUrl(post)"
+              :to="postUrl(post)"
+              class="mt-1 inline-block text-xl font-black text-white underline-offset-4 hover:text-ember hover:underline"
+              @click.stop
+            >
+              {{ post.title }}
+            </NuxtLink>
+            <span v-else class="mt-1 block text-xl font-black text-white hover:text-ember">{{ post.title }}</span>
             <p class="mt-2 line-clamp-2 max-w-3xl text-sm leading-6 text-mist">{{ post.description || 'Sem descricao.' }}</p>
-            <p class="mt-2 text-xs text-mist">{{ post.systemName || 'Generico' }} | por {{ post.author?.name || 'Usuario removido' }}</p>
-          </button>
+            <p class="mt-2 text-xs text-mist">{{ post.systemName || 'Generico' }} - por {{ post.author?.name || 'Usuario removido' }}</p>
+          </div>
           <div class="flex flex-wrap items-start gap-2">
             <AppButton v-if="post.author?.id !== auth.user?.id" variant="ghost" :loading="addingId === post.id" @click="clonePost(post.id, post.type)">
               <PlusCircle class="h-4 w-4" />Adicionar
@@ -171,8 +201,9 @@ async function deletePost() {
         </div>
 
         <div class="mt-4 flex flex-wrap gap-2">
-          <button type="button" class="inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/10 px-3 text-sm font-bold text-white hover:border-ember/40" @click="like(post.id)">
-            <Heart class="h-4 w-4" />{{ post._count?.likes || 0 }}
+          <button type="button" class="inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/10 px-3 text-sm font-bold text-white transition hover:border-ember/40 disabled:cursor-not-allowed disabled:opacity-60" :disabled="likingId === post.id" @click="like(post.id)">
+            <span v-if="likingId === post.id" class="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            <Heart v-else class="h-4 w-4" />{{ post._count?.likes || 0 }}
           </button>
           <button type="button" class="inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/10 px-3 text-sm font-bold text-mist" @click="toggle(post.id)">
             <MessageCircle class="h-4 w-4" />{{ post._count?.comments || 0 }}

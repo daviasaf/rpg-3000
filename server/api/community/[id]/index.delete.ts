@@ -1,10 +1,12 @@
 import { createError, getRouterParam } from 'h3'
 import { requireAuth } from '../../../utils/auth'
 import { prisma } from '../../../utils/prisma'
+import { assertActionCooldown } from '../../../utils/rateLimit'
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuth(event)
   const id = getRouterParam(event, 'id') || ''
+  assertActionCooldown(`community-delete:${user.id}:${id}`, 1500)
 
   const post = await prisma.communityPost.findUnique({
     where: { id },

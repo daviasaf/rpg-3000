@@ -2,10 +2,12 @@ import { createError, getRouterParam } from 'h3'
 import { requireAuth } from '../../../utils/auth'
 import { prisma } from '../../../utils/prisma'
 import { publishCharacterSnapshot } from '../../../utils/community'
+import { assertActionCooldown } from '../../../utils/rateLimit'
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuth(event)
   const id = getRouterParam(event, 'id') || ''
+  assertActionCooldown(`character-publish:${user.id}:${id}`, 2000)
   const character = await prisma.character.findUnique({ where: { id } })
 
   if (!character) throw createError({ statusCode: 404, statusMessage: 'Personagem nao encontrado.' })

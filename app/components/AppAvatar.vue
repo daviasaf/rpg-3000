@@ -2,7 +2,7 @@
 const props = withDefaults(defineProps<{
   name?: string | null
   src?: string | null
-  size?: 'sm' | 'md' | 'lg' | 'xl'
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl'
   color?: string | null
   rounded?: 'full' | 'lg'
 }>(), {
@@ -27,7 +27,8 @@ const sizeClass = computed(() => ({
   sm: 'h-8 w-8 text-xs',
   md: 'h-10 w-10 text-sm',
   lg: 'h-12 w-12 text-base',
-  xl: 'h-16 w-16 text-xl'
+  xl: 'h-16 w-16 text-xl',
+  '2xl': 'h-28 w-28 text-4xl'
 }[props.size]))
 
 const radiusClass = computed(() => props.rounded === 'full' ? 'rounded-full' : 'rounded-lg')

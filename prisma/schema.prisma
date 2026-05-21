@@ -111,6 +111,8 @@ model User {
   profileWallComments ProfileWallComment[] @relation("ProfileWallOwner")
   authoredProfileWallComments ProfileWallComment[] @relation("ProfileWallAuthor")
   profileLikes        ProfileLike[]
+  receivedProfileLikes UserProfileLike[]   @relation("UserProfileLikeTarget")
+  givenProfileLikes   UserProfileLike[]     @relation("UserProfileLikeAuthor")
   privateMessages     PrivateMessage[]
 }
 
@@ -124,6 +126,7 @@ model System {
   visibility  SystemVisibility @default(PUBLIC)
   moderationStatus ModerationStatus @default(PENDING)
   moderationReason String?
+  featuredOnProfile Boolean @default(false)
   createdById String?
   createdBy   User?            @relation("SystemCreator", fields: [createdById], references: [id], onDelete: SetNull)
   schemaJson  Json
@@ -175,6 +178,7 @@ model Npc {
   isCommunity Boolean   @default(false)
   moderationStatus ModerationStatus @default(PENDING)
   moderationReason String?
+  featuredOnProfile Boolean   @default(false)
   systemId    String?
   system      System?   @relation(fields: [systemId], references: [id], onDelete: SetNull)
   createdById String?
@@ -301,6 +305,7 @@ model Character {
   system      System                @relation(fields: [systemId], references: [id], onDelete: Restrict)
   moderationStatus ModerationStatus @default(APPROVED)
   moderationReason String?
+  featuredOnProfile Boolean @default(false)
   dataJson    Json
   values      CharacterFieldValue[]
   roomMembers RoomMember[]
@@ -508,6 +513,18 @@ model ProfileLike {
   createdAt DateTime    @default(now())
 
   @@unique([postId, userId])
+  @@index([userId])
+}
+
+model UserProfileLike {
+  id        String   @id @default(cuid())
+  profileId String
+  profile   User     @relation("UserProfileLikeTarget", fields: [profileId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation("UserProfileLikeAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([profileId, userId])
   @@index([userId])
 }
 

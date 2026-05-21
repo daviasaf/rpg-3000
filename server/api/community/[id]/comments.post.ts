@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { readZodBody } from '../../../utils/body'
 import { requireAuth } from '../../../utils/auth'
 import { prisma } from '../../../utils/prisma'
+import { assertActionCooldown } from '../../../utils/rateLimit'
 
 const schema = z.object({
   content: z.string().trim().min(1, 'Escreva um comentario.').max(600, 'Comentario muito longo.')
@@ -11,6 +12,7 @@ const schema = z.object({
 export default defineEventHandler(async (event) => {
   const user = await requireAuth(event)
   const postId = getRouterParam(event, 'id') || ''
+  assertActionCooldown(`community-comment:${user.id}:${postId}`, 1500)
   const input = await readZodBody(event, schema)
   const post = await prisma.communityPost.findFirst({ where: { id: postId, status: 'APPROVED' } })
 

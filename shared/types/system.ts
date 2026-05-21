@@ -29,10 +29,32 @@ export interface SystemSchema {
   defaultRoll?: string
   notes?: string
   categories?: string[]
+  rulesMarkdown?: string
+  sheetSections?: Array<{
+    id?: string
+    key: string
+    title: string
+    enabled?: boolean
+    multiple?: boolean
+    longText?: boolean
+    allowDamage?: boolean
+    allowSkill?: boolean
+    allowExtras?: boolean
+  }>
   sheetTexts?: Array<{
     id?: string
     name: string
     text: string
+  }>
+  sheetLists?: Array<{
+    id?: string
+    key: string
+    name: string
+    description?: string
+    enabled?: boolean
+    allowDamage?: boolean
+    allowSkill?: boolean
+    allowExtras?: boolean
   }>
   leveling?: {
     attributesPerLevel?: number

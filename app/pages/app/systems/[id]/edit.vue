@@ -31,8 +31,11 @@ const schema = ref<SystemSchema>({
   primaryResource: data.value?.system.schemaJson?.primaryResource || 'vida',
   defaultRoll: data.value?.system.schemaJson?.defaultRoll || '1d20 + atributo',
   notes: data.value?.system.schemaJson?.notes || '',
-  categories: data.value?.system.schemaJson?.categories || ['Atributos', 'Recursos', 'Pericias', 'Classes', 'Textos da ficha'],
+  categories: data.value?.system.schemaJson?.categories || ['Atributos', 'Recursos', 'Pericias', 'Classes'],
+  rulesMarkdown: data.value?.system.schemaJson?.rulesMarkdown || '',
+  sheetSections: data.value?.system.schemaJson?.sheetSections || defaultSheetSections(),
   sheetTexts: data.value?.system.schemaJson?.sheetTexts || [],
+  sheetLists: data.value?.system.schemaJson?.sheetLists?.length ? data.value.system.schemaJson.sheetLists : defaultSheetLists(),
   leveling: {
     levelOneAttributePoints: data.value?.system.schemaJson?.leveling?.levelOneAttributePoints ?? 6,
     attributesPerLevel: data.value?.system.schemaJson?.leveling?.attributesPerLevel ?? 1,
@@ -103,6 +106,26 @@ function validateDraft() {
     if (!item.text?.trim()) errors.push(`${label}: informe o texto exibido na ficha.`)
   })
 
+  const sectionKeys = new Set<string>()
+  ;(schema.value.sheetSections || []).forEach((item, index) => {
+    const label = item.title?.trim() || `Secao ${index + 1}`
+    const key = keyFromLabel(item.key || item.title || '')
+    if (!item.title?.trim()) errors.push(`${label}: informe o nome da secao.`)
+    if (!key || key.length < 2) errors.push(`${label}: informe uma chave tecnica com pelo menos 2 caracteres.`)
+    if (sectionKeys.has(key)) errors.push(`${label}: a chave da secao esta repetida.`)
+    sectionKeys.add(key)
+  })
+
+  const listKeys = new Set<string>()
+  ;(schema.value.sheetLists || []).forEach((item, index) => {
+    const label = item.name?.trim() || `Lista ${index + 1}`
+    const key = keyFromLabel(item.key || item.name || '')
+    if (!item.name?.trim()) errors.push(`${label}: informe o nome da lista.`)
+    if (!key || key.length < 2) errors.push(`${label}: informe uma chave tecnica com pelo menos 2 caracteres.`)
+    if (listKeys.has(key)) errors.push(`${label}: a chave da lista esta repetida.`)
+    listKeys.add(key)
+  })
+
   fields.value.forEach((field, index) => {
     const fieldName = field.label?.trim() || `Campo ${index + 1}`
     const key = keyFromLabel(field.key || field.label || '')
@@ -145,6 +168,20 @@ function normalizeSchema(currentSchema: SystemSchema, normalizedFields: DynamicF
   return {
     ...currentSchema,
     primaryResource: keyFromLabel(currentSchema.primaryResource || 'vida'),
+    rulesMarkdown: currentSchema.rulesMarkdown?.trim() || '',
+    sheetSections: (currentSchema.sheetSections || defaultSheetSections())
+      .map((item, index) => ({
+        id: item.id || `section_${index + 1}`,
+        key: keyFromLabel(item.key || item.title),
+        title: item.title.trim(),
+        enabled: item.enabled !== false,
+        multiple: Boolean(item.multiple),
+        longText: Boolean(item.longText),
+        allowDamage: Boolean(item.allowDamage),
+        allowSkill: Boolean(item.allowSkill),
+        allowExtras: Boolean(item.allowExtras)
+      }))
+      .filter((item) => item.key && item.title),
     sheetTexts: (currentSchema.sheetTexts || [])
       .map((item, index) => ({
         id: item.id || `sheet_text_${index + 1}`,
@@ -152,6 +189,18 @@ function normalizeSchema(currentSchema: SystemSchema, normalizedFields: DynamicF
         text: item.text.trim()
       }))
       .filter((item) => item.name && item.text),
+    sheetLists: (currentSchema.sheetLists || [])
+      .map((item, index) => ({
+        id: item.id || `sheet_list_${index + 1}`,
+        key: keyFromLabel(item.key || item.name),
+        name: item.name.trim(),
+        description: item.description?.trim() || '',
+        enabled: item.enabled !== false,
+        allowDamage: Boolean(item.allowDamage),
+        allowSkill: Boolean(item.allowSkill),
+        allowExtras: item.allowExtras !== false
+      }))
+      .filter((item) => item.key && item.name),
     leveling: {
       levelOneAttributePoints: Math.max(0, Math.min(200, Number(currentSchema.leveling?.levelOneAttributePoints ?? 6))),
       attributesPerLevel: Math.max(0, Math.min(100, Number(currentSchema.leveling?.attributesPerLevel ?? 1))),
@@ -177,6 +226,26 @@ function normalizeSchema(currentSchema: SystemSchema, normalizedFields: DynamicF
       }))
     }))
   }
+}
+
+function defaultSheetSections(): NonNullable<SystemSchema['sheetSections']> {
+  return [
+    { id: 'section_items', key: 'items', title: 'Itens', enabled: true, multiple: true },
+    { id: 'section_weapons', key: 'weapons', title: 'Armas', enabled: true, multiple: true, allowDamage: true, allowSkill: true },
+    { id: 'section_traits', key: 'traits', title: 'Tracos / Talentos', enabled: true, multiple: true },
+    { id: 'section_powers', key: 'powers', title: 'Poderes', enabled: true, multiple: true, allowDamage: true },
+    { id: 'section_biography', key: 'biography', title: 'Biografia', enabled: true, multiple: false, longText: true },
+    { id: 'section_appearance', key: 'appearance', title: 'Aparencia', enabled: true, multiple: false, longText: true },
+    { id: 'section_personality', key: 'personality', title: 'Alinhamento / Personalidade', enabled: true, multiple: false, longText: true },
+    { id: 'section_conditions', key: 'conditions', title: 'Condicoes', enabled: true, multiple: true }
+  ]
+}
+
+function defaultSheetLists(): NonNullable<SystemSchema['sheetLists']> {
+  return [
+    { id: 'sheet_list_equipment', key: 'equipment', name: 'Lista de equipamentos', description: 'Equipamentos, ferramentas, armaduras e itens carregados pelo personagem.', enabled: true, allowDamage: true, allowExtras: true },
+    { id: 'sheet_list_spells', key: 'spells', name: 'Lista de magias', description: 'Magias, tecnicas ou efeitos sobrenaturais.', enabled: true, allowDamage: true, allowSkill: true, allowExtras: true }
+  ]
 }
 
 function keyFromLabel(label: string) {

@@ -2,10 +2,12 @@ import { createError, getRouterParam } from 'h3'
 import { requireAuth } from '../../../utils/auth'
 import { prisma } from '../../../utils/prisma'
 import { publishSystemSnapshot } from '../../../utils/community'
+import { assertActionCooldown } from '../../../utils/rateLimit'
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuth(event)
   const id = getRouterParam(event, 'id') || ''
+  assertActionCooldown(`system-publish:${user.id}:${id}`, 2000)
   const system = await prisma.system.findUnique({ where: { id } })
 
   if (!system) throw createError({ statusCode: 404, statusMessage: 'Sistema nao encontrado.' })

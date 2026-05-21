@@ -106,7 +106,8 @@ onBeforeUnmount(() => {
           :disabled="item.disabled"
           @click="selectItem(item)"
         >
-          <component :is="item.icon" v-if="item.icon" class="h-4 w-4" :class="item.danger ? 'text-red-200' : 'text-ember'" />
+          <component :is="item.icon" v-if="item.icon" class="h-4 w-4 shrink-0" :class="item.danger ? 'text-red-200' : 'text-ember'" />
+          <span v-else class="h-4 w-4 shrink-0" />
           <span>{{ item.label }}</span>
         </button>
       </div>

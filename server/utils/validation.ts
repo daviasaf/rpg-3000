@@ -76,11 +76,33 @@ export const createSystemSchema = z.object({
       defaultRoll: z.string().optional(),
       notes: z.string().optional(),
       categories: z.array(z.string()).optional(),
+      rulesMarkdown: z.string().max(8000).optional(),
+      sheetSections: z.array(z.object({
+        id: z.string().optional(),
+        key: z.string().trim().min(2).max(64).regex(/^[a-zA-Z0-9_/-]+$/, 'Use apenas letras, numeros, hifen, barra ou underline.'),
+        title: z.string().trim().min(2).max(80),
+        enabled: z.boolean().optional(),
+        multiple: z.boolean().optional(),
+        longText: z.boolean().optional(),
+        allowDamage: z.boolean().optional(),
+        allowSkill: z.boolean().optional(),
+        allowExtras: z.boolean().optional()
+      })).max(20).optional(),
       sheetTexts: z.array(z.object({
         id: z.string().optional(),
         name: z.string().trim().min(1).max(80),
         text: z.string().trim().min(1).max(800)
       })).optional(),
+      sheetLists: z.array(z.object({
+        id: z.string().optional(),
+        key: z.string().trim().min(2).max(64).regex(/^[a-zA-Z0-9_/-]+$/, 'Use apenas letras, numeros, hifen, barra ou underline.'),
+        name: z.string().trim().min(2).max(80),
+        description: z.string().trim().max(300).optional(),
+        enabled: z.boolean().optional(),
+        allowDamage: z.boolean().optional(),
+        allowSkill: z.boolean().optional(),
+        allowExtras: z.boolean().optional()
+      })).max(12).optional(),
       leveling: z.object({
         attributesPerLevel: z.number().int().min(0).max(100).default(1).optional(),
         levelOneAttributeLimit: z.number().int().min(1).max(100).default(5).optional(),

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Edit3, ExternalLink, Heart, MessageCircle, PlusCircle, Settings, UserPlus } from 'lucide-vue-next'
+import { ArrowLeft, Edit3, ExternalLink, Heart, MessageCircle, PlusCircle, Star, Trash2, UserPlus } from 'lucide-vue-next'
 import type { SystemSchema } from '../../../../../shared/types/system'
 
 definePageMeta({ layout: 'app', middleware: 'auth' })
@@ -10,18 +10,21 @@ const auth = useAuthStore()
 const { push, apiError } = useToast()
 const deleting = ref(false)
 const adding = ref(false)
-const settingsOpen = ref(false)
 const confirmDeleteOpen = ref(false)
+const likeLoading = ref(false)
+const featuring = ref(false)
 const comment = ref('')
 const commenting = ref(false)
 const { data, refresh } = await useFetch<{ system: {
   id: string
   name: string
   description: string
+  avatarUrl?: string | null
   tags: string[]
   visibility: string
   moderationStatus?: string
   moderationReason?: string | null
+  featuredOnProfile?: boolean
   createdById?: string | null
   createdBy?: { id: string; name: string } | null
   schemaJson?: SystemSchema
@@ -69,15 +72,27 @@ async function deleteSystem() {
 }
 
 async function toggleLike() {
+  if (likeLoading.value) {
+    push('Aguarde um instante antes de tentar novamente.', 'info')
+    return
+  }
+
+  likeLoading.value = true
   try {
     await $fetch(`/api/systems/${route.params.id}/like`, { method: 'POST' })
     await refresh()
   } catch (error) {
     apiError(error, 'Nao foi possivel curtir o sistema.')
+  } finally {
+    likeLoading.value = false
   }
 }
 
 async function addToInventory() {
+  if (adding.value) {
+    push('Essa acao ja esta sendo processada.', 'info')
+    return
+  }
   adding.value = true
   try {
     await $fetch(`/api/systems/${route.params.id}/clone`, { method: 'POST' })
@@ -86,6 +101,54 @@ async function addToInventory() {
     apiError(error, 'Nao foi possivel adicionar o sistema.')
   } finally {
     adding.value = false
+  }
+}
+
+function ownerActions() {
+  const system = data.value?.system
+  return [
+    { key: 'edit', label: 'Editar', icon: Edit3, disabled: isRejected.value },
+    {
+      key: 'feature',
+      label: system?.featuredOnProfile ? 'Remover destaque' : 'Destacar no perfil',
+      icon: Star,
+      disabled: isRejected.value || system?.moderationStatus !== 'APPROVED' || featuring.value
+    },
+    { key: 'delete', label: 'Apagar', icon: Trash2, danger: true, disabled: deleting.value }
+  ]
+}
+
+async function handleOwnerAction(action: string) {
+  const system = data.value?.system
+  if (!system) return
+
+  if (action === 'edit') {
+    await navigateTo(`/app/systems/${system.id}/edit`)
+  }
+  if (action === 'feature') {
+    await toggleFeatured()
+  }
+  if (action === 'delete') {
+    confirmDeleteOpen.value = true
+  }
+}
+
+async function toggleFeatured() {
+  const system = data.value?.system
+  if (!system || featuring.value) return
+
+  featuring.value = true
+  try {
+    const response = await $fetch<{ featured: boolean }>('/api/profile/featured', {
+      method: 'POST',
+      body: { type: 'SYSTEM', id: system.id, featured: !system.featuredOnProfile }
+    })
+    system.featuredOnProfile = response.featured
+    push(response.featured ? 'Sistema destacado no perfil.' : 'Destaque removido do perfil.', 'success')
+  } catch (error) {
+    apiError(error, 'Nao foi possivel alterar o destaque.')
+  } finally {
+    featuring.value = false
   }
 }
 
@@ -128,8 +191,12 @@ function categoryLabel(category: string) {
     </button>
 
     <AppCard>
-      <div class="flex flex-wrap items-start justify-between gap-4">
-        <div>
+      <div class="grid gap-5 lg:grid-cols-[132px_minmax(0,1fr)]">
+        <div class="flex justify-center lg:justify-start">
+          <AppAvatar :name="data.system.name" :src="data.system.avatarUrl" size="2xl" />
+        </div>
+        <div class="flex flex-wrap items-start justify-between gap-4">
+        <div class="min-w-0">
           <div class="flex flex-wrap gap-2">
             <span v-for="tag in data.system.tags" :key="tag" class="rounded-md border border-ember/25 bg-ember/10 px-2 py-1 text-xs font-bold text-ember">{{ tag }}</span>
             <span v-if="data.system.moderationStatus" class="rounded-md border px-2 py-1 text-xs font-bold" :class="isRejected ? 'border-flare/35 bg-flare/10 text-red-100' : data.system.moderationStatus === 'PENDING' ? 'border-amber-300/30 bg-amber-300/10 text-amber-100' : 'border-emerald-400/25 bg-emerald-400/10 text-emerald-100'">
@@ -141,10 +208,11 @@ function categoryLabel(category: string) {
           <p v-if="isRejected" class="mt-3 rounded-lg border border-flare/35 bg-flare/10 p-3 text-sm font-bold text-red-100">
             Este sistema foi rejeitado e esta bloqueado para edicao. {{ data.system.moderationReason ? `Motivo: ${data.system.moderationReason}` : 'Crie uma nova versao para enviar novamente.' }}
           </p>
-          <p class="mt-3 text-sm text-mist">Criador: {{ data.system.createdBy?.name || 'Toca dos Nerds' }} | {{ data.system.visibility }}</p>
+          <p class="mt-3 text-sm text-mist">Criador: {{ data.system.createdBy?.name || 'Toca dos Nerds' }}</p>
           <div class="mt-4 flex flex-wrap gap-2">
-            <button type="button" class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-bold" :class="liked ? 'border-ember bg-ember/15 text-ember' : 'border-white/10 bg-white/[0.04] text-white'" @click="toggleLike">
-              <Heart class="h-4 w-4" />{{ data.system._count?.likes || 0 }}
+            <button type="button" class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-60" :class="liked ? 'border-ember bg-ember/15 text-ember' : 'border-white/10 bg-white/[0.04] text-white'" :disabled="likeLoading" @click="toggleLike">
+              <span v-if="likeLoading" class="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              <Heart v-else class="h-4 w-4" />{{ data.system._count?.likes || 0 }}
             </button>
             <span class="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm font-bold text-mist">
               <MessageCircle class="h-4 w-4" />{{ data.system._count?.comments || 0 }}
@@ -152,6 +220,9 @@ function categoryLabel(category: string) {
             <NuxtLink :to="`/app/community?type=system&id=${data.system.id}`" class="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm font-bold text-white hover:border-ember/40">
               <ExternalLink class="h-4 w-4" />Ver post na comunidade
             </NuxtLink>
+            <span v-if="data.system.featuredOnProfile" class="inline-flex items-center gap-2 rounded-lg border border-ember/30 bg-ember/10 px-3 py-2 text-sm font-bold text-ember">
+              <Star class="h-4 w-4" />Destacado no perfil
+            </span>
           </div>
         </div>
         <div class="flex gap-2">
@@ -159,15 +230,8 @@ function categoryLabel(category: string) {
             <PlusCircle class="h-4 w-4" />Adicionar ao inventario
           </AppButton>
           <NuxtLink :to="`/app/characters/new?systemId=${data.system.id}`"><AppButton><UserPlus class="h-4 w-4" />Criar personagem</AppButton></NuxtLink>
-          <div v-if="isOwner" class="relative">
-            <button type="button" class="grid h-10 w-10 place-items-center rounded-lg border border-white/10 bg-white/[0.06] text-mist hover:text-white" @click="settingsOpen = !settingsOpen">
-              <Settings class="h-5 w-5" />
-            </button>
-            <div v-if="settingsOpen" class="absolute right-0 top-12 z-10 w-44 rounded-lg border border-white/10 bg-panel p-1 shadow-soft">
-              <NuxtLink v-if="!isRejected" :to="`/app/systems/${data.system.id}/edit`" class="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-bold text-white hover:bg-white/10"><Edit3 class="h-4 w-4" />Editar</NuxtLink>
-              <button type="button" class="block w-full rounded-md px-3 py-2 text-left text-sm font-bold text-red-100 hover:bg-flare/15" @click="confirmDeleteOpen = true; settingsOpen = false">Apagar</button>
-            </div>
-          </div>
+          <AppActionMenu v-if="isOwner" title="Acoes do sistema" :items="ownerActions()" @select="handleOwnerAction" />
+        </div>
         </div>
       </div>
     </AppCard>

@@ -3,6 +3,7 @@ import { requireAuth } from '../../../utils/auth'
 import { prisma } from '../../../utils/prisma'
 import { jsonValue, nullableJsonValue } from '../../../utils/json'
 import { slugify } from '../../../utils/slug'
+import { assertActionCooldown } from '../../../utils/rateLimit'
 
 async function createUniqueSlug(name: string) {
   const base = slugify(name) || 'sistema'
@@ -18,6 +19,7 @@ async function createUniqueSlug(name: string) {
 export default defineEventHandler(async (event) => {
   const user = await requireAuth(event)
   const id = getRouterParam(event, 'id') || ''
+  assertActionCooldown(`community-clone:${user.id}:${id}`, 2000)
   const post = await prisma.communityPost.findFirst({ where: { id, status: 'APPROVED' } })
 
   if (!post) throw createError({ statusCode: 404, statusMessage: 'Publicacao nao encontrada.' })

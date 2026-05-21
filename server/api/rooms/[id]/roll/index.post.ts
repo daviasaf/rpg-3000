@@ -6,10 +6,12 @@ import { parseAndRollDice } from '../../../../utils/dice'
 import { diceRollSchema } from '../../../../utils/validation'
 import { jsonValue } from '../../../../utils/json'
 import { readZodBody } from '../../../../utils/body'
+import { assertActionCooldown } from '../../../../utils/rateLimit'
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuth(event)
   const roomId = getRouterParam(event, 'id') || ''
+  assertActionCooldown(`roll:${user.id}:${roomId}`, 900)
   const room = await requireRoomAccess(roomId, user.id)
   const input = await readZodBody(event, diceRollSchema)
 
