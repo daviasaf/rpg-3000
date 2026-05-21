@@ -86,7 +86,7 @@ export default defineEventHandler(async (event) => {
     try {
       await sendVerificationEmail(
         current.email,
-        'Confirme alteracao de conta - Central RPG 3000',
+        'Confirme alteracao de conta - Toca dos Nerds',
         verificationUrl,
         'Recebemos uma solicitacao para alterar dados sensiveis da sua conta.'
       )

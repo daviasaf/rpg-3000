@@ -40,10 +40,10 @@ export interface SystemSchema {
 }
 
 export interface SystemClassLevelChange {
-  targetKey: string
+  targetKey?: string
   targetLabel?: string
-  operation: 'ADD' | 'SET'
-  value: number
+  operation: 'ADD' | 'SET' | 'NOTE'
+  value?: number
   note?: string
 }
 

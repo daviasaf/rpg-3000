@@ -141,7 +141,7 @@ function categoryLabel(category: string) {
           <p v-if="isRejected" class="mt-3 rounded-lg border border-flare/35 bg-flare/10 p-3 text-sm font-bold text-red-100">
             Este sistema foi rejeitado e esta bloqueado para edicao. {{ data.system.moderationReason ? `Motivo: ${data.system.moderationReason}` : 'Crie uma nova versao para enviar novamente.' }}
           </p>
-          <p class="mt-3 text-sm text-mist">Criador: {{ data.system.createdBy?.name || 'Central RPG' }} | {{ data.system.visibility }}</p>
+          <p class="mt-3 text-sm text-mist">Criador: {{ data.system.createdBy?.name || 'Toca dos Nerds' }} | {{ data.system.visibility }}</p>
           <div class="mt-4 flex flex-wrap gap-2">
             <button type="button" class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-bold" :class="liked ? 'border-ember bg-ember/15 text-ember' : 'border-white/10 bg-white/[0.04] text-white'" @click="toggleLike">
               <Heart class="h-4 w-4" />{{ data.system._count?.likes || 0 }}

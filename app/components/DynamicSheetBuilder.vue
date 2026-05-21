@@ -5,20 +5,20 @@ import type { DynamicField, FieldCategory, FieldType, SystemClass, SystemClassLe
 const fields = defineModel<DynamicField[]>('fields', { required: true })
 const schema = defineModel<SystemSchema>('schema', { required: true })
 
-const steps = ['Informacoes', 'Regras de nivel', 'Atributos', 'Recursos', 'Pericias', 'Classes', 'Campos', 'Rolagens', 'Preview', 'Publicar']
+const steps = ['Informacoes', 'Regras de nivel', 'Atributos', 'Recursos', 'Pericias', 'Classes', 'Textos da ficha', 'Rolagens', 'Preview', 'Publicar']
 const current = ref(0)
 
 const categories: Record<string, FieldCategory> = {
   Atributos: 'ATTRIBUTE',
   Recursos: 'RESOURCE',
   Pericias: 'SKILL',
-  Campos: 'TEXT_FIELD',
+  'Textos da ficha': 'TEXT_FIELD',
   Rolagens: 'ROLL_RULE'
 }
 
 const currentStep = computed(() => steps[current.value] || 'Informacoes')
 const currentCategory = computed(() => categories[currentStep.value])
-const classTargets = computed(() => fields.value.filter((field) => ['ATTRIBUTE', 'SKILL', 'RESOURCE'].includes(field.category)))
+const classTargets = computed(() => fields.value.filter((field) => field.type === 'NUMBER' && ['ATTRIBUTE', 'SKILL', 'RESOURCE', 'STATUS_BAR', 'NUMERIC_FIELD'].includes(field.category)))
 const classes = computed(() => schema.value.classes || [])
 
 if (!schema.value.leveling) {
@@ -111,11 +111,19 @@ function addLevelChange(level: SystemClassLevel) {
   })
 }
 
+function addLevelText(level: SystemClassLevel) {
+  level.changes.push({
+    operation: 'NOTE',
+    note: 'Novo texto de classe para mostrar na ficha.'
+  })
+}
+
 function removeLevelChange(level: SystemClassLevel, index: number) {
   level.changes.splice(index, 1)
 }
 
 function syncTargetLabel(change: SystemClassLevelChange) {
+  if (!change.targetKey) return
   const target = classTargets.value.find((field) => field.key === change.targetKey)
   change.targetLabel = target?.label || change.targetKey
 }
@@ -257,7 +265,7 @@ function categoryLabel(category: string) {
       <div class="flex items-center justify-between gap-3">
         <div>
           <h2 class="text-xl font-black text-white">Classes e progresso por nivel</h2>
-          <p class="muted">Defina como cada classe altera atributos, pericias ou recursos em cada nivel.</p>
+          <p class="muted">Defina bonus automaticos e textos de classe que aparecem na ficha do personagem.</p>
         </div>
         <AppButton type="button" :disabled="classTargets.length === 0" @click="addClass"><Plus class="h-4 w-4" />Adicionar classe</AppButton>
       </div>
@@ -294,33 +302,42 @@ function categoryLabel(category: string) {
             <div v-for="level in rpgClass.levels" :key="level.level" class="rounded-lg border border-white/10 bg-panel/70 p-3">
               <div class="flex items-center justify-between gap-3">
                 <h3 class="font-black text-white">Nivel {{ level.level }}</h3>
-                <AppButton type="button" variant="subtle" @click="addLevelChange(level)"><Plus class="h-4 w-4" />Alteracao</AppButton>
+                <div class="flex flex-wrap gap-2">
+                  <AppButton type="button" variant="subtle" @click="addLevelText(level)"><Plus class="h-4 w-4" />Texto</AppButton>
+                  <AppButton type="button" variant="subtle" @click="addLevelChange(level)"><Plus class="h-4 w-4" />Alteracao</AppButton>
+                </div>
               </div>
 
               <div class="mt-3 space-y-2">
                 <div
                   v-for="(change, changeIndex) in level.changes"
                   :key="changeIndex"
-                  class="grid gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-2 lg:grid-cols-[1fr_110px_110px_1fr_auto]"
+                  class="grid gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-2"
+                  :class="change.operation === 'NOTE' ? 'lg:grid-cols-[1fr_auto]' : 'lg:grid-cols-[1fr_110px_110px_1fr_auto]'"
                 >
-                  <label>
+                  <label v-if="change.operation === 'NOTE'">
+                    <span class="label">Texto que aparece na ficha</span>
+                    <textarea v-model="change.note" rows="2" class="input" placeholder="No nivel 3, a classe Urso ganha pele grossa e recebe +3 de armadura." />
+                  </label>
+                  <label v-else>
                     <span class="label">Alvo</span>
                     <select v-model="change.targetKey" class="select" @change="syncTargetLabel(change)">
                       <option v-for="target in classTargets" :key="target.key" :value="target.key">{{ target.label }} ({{ target.category }})</option>
                     </select>
                   </label>
-                  <label>
+                  <label v-if="change.operation !== 'NOTE'">
                     <span class="label">Regra</span>
                     <select v-model="change.operation" class="select">
                       <option value="ADD">Somar</option>
                       <option value="SET">Definir</option>
+                      <option value="NOTE">Texto</option>
                     </select>
                   </label>
-                  <label>
+                  <label v-if="change.operation !== 'NOTE'">
                     <span class="label">Valor</span>
                     <input v-model.number="change.value" type="number" class="input">
                   </label>
-                  <label>
+                  <label v-if="change.operation !== 'NOTE'">
                     <span class="label">Nota</span>
                     <input v-model="change.note" class="input" placeholder="+1 em Forca, proficiencia...">
                   </label>

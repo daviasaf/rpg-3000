@@ -36,7 +36,7 @@ defineProps<{
       {{ system.moderationReason || 'Bloqueado para edicao.' }}
     </p>
     <div class="mt-4 flex items-center justify-between text-xs text-mist">
-      <span>{{ system.createdBy?.name || 'Central RPG' }}</span>
+      <span>{{ system.createdBy?.name || 'Toca dos Nerds' }}</span>
       <span>{{ system._count?.characters ?? 0 }} fichas</span>
     </div>
   </NuxtLink>

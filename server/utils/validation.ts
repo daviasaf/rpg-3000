@@ -92,11 +92,18 @@ export const createSystemSchema = z.object({
         levels: z.array(z.object({
           level: z.number().int().min(1).max(100),
           changes: z.array(z.object({
-            targetKey: z.string().trim().min(1).max(64),
+            targetKey: z.string().trim().max(64).optional(),
             targetLabel: z.string().trim().min(1).max(80).optional(),
-            operation: z.enum(['ADD', 'SET']).default('ADD'),
-            value: z.number().default(1),
-            note: z.string().trim().max(160).optional()
+            operation: z.enum(['ADD', 'SET', 'NOTE']).default('ADD'),
+            value: z.number().default(1).optional(),
+            note: z.string().trim().max(400).optional()
+          }).superRefine((change, ctx) => {
+            if (change.operation !== 'NOTE' && !change.targetKey?.trim()) {
+              ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['targetKey'], message: 'Escolha o campo alterado pela classe.' })
+            }
+            if (change.operation === 'NOTE' && !change.note?.trim()) {
+              ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['note'], message: 'Escreva o texto que aparece na ficha.' })
+            }
           })).default([])
         })).default([])
       })).optional()

@@ -21,13 +21,13 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string) {
   await transporter.verify()
 
   await transporter.sendMail({
-    from: `"Central RPG 3000" <${config.gmailUser}>`,
+    from: `"Toca dos Nerds" <${config.gmailUser}>`,
     to,
-    subject: 'Redefinicao de senha - Central RPG 3000',
+    subject: 'Redefinicao de senha - Toca dos Nerds',
     text: `Use este link para redefinir sua senha: ${resetUrl}`,
     html: `
       <div style="font-family:Arial,sans-serif;background:#080711;color:#f8f4ff;padding:24px">
-        <h1 style="color:#ff8a13">Central RPG 3000</h1>
+        <h1 style="color:#ff8a13">Toca dos Nerds</h1>
         <p>Recebemos uma solicitacao para redefinir sua senha.</p>
         <p><a href="${resetUrl}" style="color:#ff8a13">Redefinir senha</a></p>
         <p style="color:#a6a2bd">Se voce nao pediu isso, ignore este email.</p>
@@ -59,13 +59,13 @@ export async function sendVerificationEmail(to: string, subject: string, verific
   await transporter.verify()
 
   await transporter.sendMail({
-    from: `"Central RPG 3000" <${config.gmailUser}>`,
+    from: `"Toca dos Nerds" <${config.gmailUser}>`,
     to,
     subject,
     text: `${summary}\n\nConfirme neste link: ${verificationUrl}`,
     html: `
       <div style="font-family:Arial,sans-serif;background:#080711;color:#f8f4ff;padding:24px">
-        <h1 style="color:#ff8a13">Central RPG 3000</h1>
+        <h1 style="color:#ff8a13">Toca dos Nerds</h1>
         <p>${summary}</p>
         <p><a href="${verificationUrl}" style="color:#ff8a13">Confirmar alteracao</a></p>
         <p style="color:#a6a2bd">Se voce nao pediu isso, ignore este email.</p>

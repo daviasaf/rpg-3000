@@ -15,7 +15,7 @@ import { Swords } from 'lucide-vue-next'
           <span class="grid h-10 w-10 place-items-center rounded-lg bg-gradient-to-br from-ember to-flare text-black shadow-[0_4px_12px_rgba(255,138,19,0.16)]">
             <Swords class="h-5 w-5" />
           </span>
-          <span>Central RPG 3000</span>
+          <span>Toca dos Nerds</span>
         </NuxtLink>
       </div>
     </header>
@@ -25,7 +25,7 @@ import { Swords } from 'lucide-vue-next'
         <div>
           <p class="mb-4 text-sm font-black uppercase tracking-[0.16em] text-ember">Mesa online de RPG</p>
           <h1 class="max-w-3xl text-5xl font-black tracking-tight text-white sm:text-6xl">
-            Central RPG 3000
+            Toca dos Nerds
           </h1>
           <p class="mt-6 max-w-2xl text-lg leading-8 text-mist">
             Crie sua mesa, chame os jogadores e jogue com chat, dados, iniciativa, fichas e sistemas personalizados.

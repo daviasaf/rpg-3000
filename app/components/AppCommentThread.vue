@@ -55,6 +55,10 @@ function authorName(user?: CommentAuthor | null) {
   return user?.name?.trim() || 'Usuario removido'
 }
 
+function authorProfileUrl(user?: CommentAuthor | null) {
+  return user?.id ? `/app/profiles/${user.id}` : ''
+}
+
 function canEdit(item: CommentItem) {
   return Boolean(item.user?.id && item.user.id === props.currentUserId)
 }
@@ -140,10 +144,25 @@ async function remove() {
 
     <div class="space-y-2" :class="[canCreate ? 'mt-3' : '', maxHeight && comments.length > 5 ? 'max-h-80 overflow-y-auto pr-2' : '']">
       <div v-for="item in comments" :key="item.id" class="soft-row relative flex gap-3 p-3 pr-12">
-        <AppAvatar :name="authorName(item.user)" :src="item.user?.avatarUrl" :color="item.user?.profileColor" rounded="full" size="sm" />
+        <NuxtLink
+          v-if="authorProfileUrl(item.user)"
+          :to="authorProfileUrl(item.user)"
+          class="shrink-0 rounded-full transition hover:ring-2 hover:ring-ember/60"
+          :aria-label="`Ver perfil de ${authorName(item.user)}`"
+        >
+          <AppAvatar :name="authorName(item.user)" :src="item.user?.avatarUrl" :color="item.user?.profileColor" rounded="full" size="sm" />
+        </NuxtLink>
+        <AppAvatar v-else :name="authorName(item.user)" :src="item.user?.avatarUrl" :color="item.user?.profileColor" rounded="full" size="sm" />
         <div class="min-w-0 flex-1 text-sm text-mist">
           <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-            <b class="text-white">{{ authorName(item.user) }}</b>
+            <NuxtLink
+              v-if="authorProfileUrl(item.user)"
+              :to="authorProfileUrl(item.user)"
+              class="font-black text-white transition hover:text-ember"
+            >
+              {{ authorName(item.user) }}
+            </NuxtLink>
+            <b v-else class="text-white">{{ authorName(item.user) }}</b>
             <span class="text-xs text-mist">{{ formatDate(item.createdAt) }}</span>
             <span v-if="item.updatedAt && item.updatedAt !== item.createdAt" class="text-xs text-mist">(editado)</span>
           </div>

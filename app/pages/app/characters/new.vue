@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DynamicField, SystemSchema } from '../../../../shared/types/system'
+import { applyClassProgression } from '../../../utils/characterProgression'
 
 definePageMeta({ layout: 'app', middleware: 'auth' })
 
@@ -8,6 +9,7 @@ const { push, apiError } = useToast()
 const { data: systems } = await useFetch<{ systems: Array<{ id: string; name: string; schemaJson?: SystemSchema; fields: DynamicField[] }> }>('/api/systems')
 const selectedSystemId = ref(String(route.query.systemId || systems.value?.systems[0]?.id || ''))
 const form = reactive({ name: '', description: '', avatarUrl: '' })
+const publishToCommunity = ref(false)
 const progression = reactive({ classKey: '', level: 1 })
 const dataJson = reactive<Record<string, unknown>>({})
 const loading = ref(false)
@@ -35,6 +37,7 @@ const selectedClassChanges = computed(() => {
     .filter((level) => level.level <= progression.level)
     .flatMap((level) => level.changes.map((change) => ({ ...change, level: level.level })))
 })
+const previewDataJson = computed(() => buildCharacterData())
 
 watch(selectedSystem, (system) => {
   if (!system) return
@@ -66,7 +69,16 @@ async function submit() {
       method: 'POST',
       body: { ...form, systemId: selectedSystemId.value, dataJson: buildCharacterData() }
     })
-    push('Personagem criado.', 'success')
+    if (publishToCommunity.value) {
+      try {
+        await $fetch(`/api/characters/${response.character.id}/publish`, { method: 'POST' })
+        push('Personagem criado e enviado para analise da comunidade.', 'success')
+      } catch (error) {
+        apiError(error, 'Personagem criado, mas nao foi possivel enviar para a comunidade.')
+      }
+    } else {
+      push('Personagem criado.', 'success')
+    }
     await navigateTo('/app/characters')
   } catch (error) {
     apiError(error, 'Nao foi possivel criar personagem.')
@@ -83,18 +95,7 @@ function buildCharacterData() {
 
   next.classe = rpgClass.key
   next.nivel = Math.max(1, Math.min(Number(progression.level || 1), rpgClass.maxLevel))
-
-  for (const level of rpgClass.levels.filter((item) => item.level <= Number(next.nivel))) {
-    for (const change of level.changes) {
-      if (change.operation === 'SET') {
-        next[change.targetKey] = change.value
-      } else {
-        next[change.targetKey] = Number(next[change.targetKey] || 0) + Number(change.value || 0)
-      }
-    }
-  }
-
-  return next
+  return applyClassProgression(selectedSystem.value?.schemaJson, next)
 }
 
 function setAttribute(key: string, delta: number) {
@@ -108,6 +109,10 @@ function setAttribute(key: string, delta: number) {
 function changeLevel(delta: number) {
   const max = selectedClass.value?.maxLevel || 100
   progression.level = Math.max(1, Math.min(max, Number(progression.level || 1) + delta))
+}
+
+function hasPreviewAdjustment(field: DynamicField) {
+  return field.type === 'NUMBER' && Number(previewDataJson.value[field.key] || 0) !== Number(dataJson[field.key] || 0)
 }
 
 function validateCharacterDraft() {
@@ -144,6 +149,13 @@ function validateCharacterDraft() {
           <label><span class="label">Nome *</span><input v-model="form.name" name="characterName" class="input" type="text"></label>
           <label><span class="label">Avatar por URL</span><input v-model="form.avatarUrl" name="avatarUrl" class="input" type="url" placeholder="https://..."></label>
           <label><span class="label">Descricao curta</span><textarea v-model="form.description" rows="3" class="input" placeholder="Opcional" /></label>
+          <label class="flex items-start gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-3 md:col-span-2">
+            <input v-model="publishToCommunity" type="checkbox" class="mt-1 h-4 w-4 accent-ember">
+            <span>
+              <span class="block text-sm font-black text-white">Criar e compartilhar na comunidade</span>
+              <span class="block text-xs leading-5 text-mist">O personagem sera criado e enviado para analise da comunidade automaticamente.</span>
+            </span>
+          </label>
         </div>
       </AppCard>
       <AppCard v-if="formErrors.length" class="border-flare/40 bg-flare/10">
@@ -171,6 +183,9 @@ function validateCharacterDraft() {
               <button type="button" class="grid h-9 w-9 place-items-center rounded-lg border border-white/10 text-white hover:border-ember/40" @click="setAttribute(field.key, 1)">+</button>
             </div>
             <p class="mt-2 text-xs text-mist">Limite atual: {{ attributeLimit }}</p>
+            <p v-if="hasPreviewAdjustment(field)" class="mt-1 text-xs font-bold text-ember">
+              Final com classe: {{ previewDataJson[field.key] }}
+            </p>
           </div>
         </div>
       </AppCard>
@@ -203,14 +218,24 @@ function validateCharacterDraft() {
         </div>
         <div v-if="selectedClassChanges.length" class="mt-4 max-h-44 space-y-2 overflow-y-auto pr-2">
           <p v-for="(change, index) in selectedClassChanges" :key="index" class="rounded-lg border border-white/10 bg-white/[0.04] p-2 text-sm text-mist">
-            Nivel {{ change.level }}: {{ change.operation === 'ADD' ? '+' : '=' }}{{ change.value }} em {{ change.targetLabel || change.targetKey }}
+            <template v-if="change.operation === 'NOTE'">
+              Nivel {{ change.level }}: {{ change.note }}
+            </template>
+            <template v-else>
+              Nivel {{ change.level }}: {{ change.operation === 'ADD' ? '+' : '=' }}{{ change.value }} em {{ change.targetLabel || change.targetKey }}
+            </template>
           </p>
         </div>
       </AppCard>
       <AppCard v-if="selectedSystem">
         <h2 class="mb-4 text-xl font-black text-white">Campos da ficha</h2>
         <div class="grid gap-4 md:grid-cols-2">
-          <DynamicFieldRenderer v-for="field in editableFields" :key="field.key" v-model="dataJson[field.key]" :field="field" />
+          <div v-for="field in editableFields" :key="field.key">
+            <DynamicFieldRenderer v-model="dataJson[field.key]" :field="field" />
+            <p v-if="hasPreviewAdjustment(field)" class="mt-1 text-xs font-bold text-ember">
+              Final com classe: {{ previewDataJson[field.key] }}
+            </p>
+          </div>
         </div>
       </AppCard>
       <AppButton type="submit" :loading="loading">Salvar personagem</AppButton>

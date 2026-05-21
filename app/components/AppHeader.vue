@@ -9,7 +9,7 @@ const accent = computed(() => auth.user?.profileColor || '#ff8a13')
   <header class="sticky top-0 z-30 border-b border-white/10 bg-[#080913]/90 px-4 py-3 backdrop-blur sm:px-6 lg:px-8">
     <div class="mx-auto flex max-w-7xl items-center gap-3">
       <div class="min-w-0 flex-1">
-        <p class="text-xs font-bold uppercase tracking-[0.12em] text-ember">Central RPG 3000</p>
+        <p class="text-xs font-bold uppercase tracking-[0.12em] text-ember">Toca dos Nerds</p>
         <p class="hidden text-sm text-mist sm:block">Mesas, fichas e sistemas sem amarras.</p>
       </div>
       <div class="flex items-center gap-2">

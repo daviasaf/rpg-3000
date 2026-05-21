@@ -16,7 +16,7 @@ const basic = reactive({
 const schema = ref<SystemSchema>({
   primaryResource: 'vida',
   defaultRoll: '1d20 + atributo',
-  categories: ['Atributos', 'Recursos', 'Pericias', 'Classes', 'Campos'],
+  categories: ['Atributos', 'Recursos', 'Pericias', 'Classes', 'Textos da ficha'],
   leveling: {
     levelOneAttributePoints: 6,
     attributesPerLevel: 1,
@@ -131,8 +131,11 @@ function validateDraft() {
 
     rpgClass.levels.forEach((level) => {
       level.changes.forEach((change) => {
-        if (!fieldKeys.has(change.targetKey)) {
+        if (change.operation !== 'NOTE' && !fieldKeys.has(change.targetKey || '')) {
           errors.push(`${className} nivel ${level.level}: escolha um atributo, pericia ou recurso valido.`)
+        }
+        if (change.operation === 'NOTE' && !change.note?.trim()) {
+          errors.push(`${className} nivel ${level.level}: escreva o texto que deve aparecer na ficha.`)
         }
       })
     })
@@ -189,8 +192,8 @@ function normalizeSchema(currentSchema: SystemSchema, normalizedFields: DynamicF
         .map((level) => ({
           level: Number(level.level),
           changes: level.changes.map((change) => ({
-            targetKey: keyFromLabel(change.targetKey),
-            targetLabel: targetLabels.get(keyFromLabel(change.targetKey)) || change.targetLabel || change.targetKey,
+            targetKey: change.operation === 'NOTE' ? undefined : keyFromLabel(change.targetKey || ''),
+            targetLabel: change.operation === 'NOTE' ? undefined : targetLabels.get(keyFromLabel(change.targetKey || '')) || change.targetLabel || change.targetKey,
             operation: change.operation,
             value: Number(change.value || 0),
             note: change.note?.trim() || ''

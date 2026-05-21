@@ -31,7 +31,7 @@ const schema = ref<SystemSchema>({
   primaryResource: data.value?.system.schemaJson?.primaryResource || 'vida',
   defaultRoll: data.value?.system.schemaJson?.defaultRoll || '1d20 + atributo',
   notes: data.value?.system.schemaJson?.notes || '',
-  categories: data.value?.system.schemaJson?.categories || ['Atributos', 'Recursos', 'Pericias', 'Classes', 'Campos'],
+  categories: data.value?.system.schemaJson?.categories || ['Atributos', 'Recursos', 'Pericias', 'Classes', 'Textos da ficha'],
   leveling: {
     levelOneAttributePoints: data.value?.system.schemaJson?.leveling?.levelOneAttributePoints ?? 6,
     attributesPerLevel: data.value?.system.schemaJson?.leveling?.attributesPerLevel ?? 1,
@@ -154,8 +154,8 @@ function normalizeSchema(currentSchema: SystemSchema, normalizedFields: DynamicF
       levels: rpgClass.levels.map((level) => ({
         level: Number(level.level),
         changes: level.changes.map((change) => ({
-          targetKey: keyFromLabel(change.targetKey),
-          targetLabel: targetLabels.get(keyFromLabel(change.targetKey)) || change.targetLabel || change.targetKey,
+          targetKey: change.operation === 'NOTE' ? undefined : keyFromLabel(change.targetKey || ''),
+          targetLabel: change.operation === 'NOTE' ? undefined : targetLabels.get(keyFromLabel(change.targetKey || '')) || change.targetLabel || change.targetKey,
           operation: change.operation,
           value: Number(change.value || 0),
           note: change.note?.trim() || ''

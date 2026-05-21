@@ -276,7 +276,7 @@ function showChartLabel(index: number, total?: number) {
       <form class="surface w-full max-w-md rounded-lg p-6" @submit.prevent="login">
         <div class="flex items-center gap-3">
           <div class="grid h-12 w-12 place-items-center rounded-lg bg-ember text-black"><ShieldCheck class="h-6 w-6" /></div>
-          <div><p class="text-xs font-black uppercase tracking-[0.12em] text-ember">Central RPG 3000</p><h1 class="text-2xl font-black">Admin</h1></div>
+          <div><p class="text-xs font-black uppercase tracking-[0.12em] text-ember">Toca dos Nerds</p><h1 class="text-2xl font-black">Admin</h1></div>
         </div>
         <label class="mt-6 block"><span class="label">Senha</span><input v-model="password" class="input" type="password" autocomplete="current-password"></label>
         <AppButton class="mt-4 w-full" type="submit" :loading="loading">Entrar</AppButton>
@@ -288,7 +288,7 @@ function showChartLabel(index: number, total?: number) {
         <div class="flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-3">
           <div class="grid h-11 w-11 place-items-center rounded-lg bg-ember text-black"><ShieldCheck class="h-5 w-5" /></div>
           <div class="min-w-0">
-            <p class="truncate text-sm font-black text-white">Central RPG 3000</p>
+            <p class="truncate text-sm font-black text-white">Toca dos Nerds</p>
             <p class="text-xs text-mist">Painel administrativo</p>
           </div>
         </div>

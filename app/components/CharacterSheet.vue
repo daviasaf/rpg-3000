@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ChevronDown } from 'lucide-vue-next'
+import { ChevronDown, Info } from 'lucide-vue-next'
 import type { DynamicField, SystemSchema } from '../../shared/types/system'
+import { classNotes, fieldSources } from '../utils/characterProgression'
 
 const props = defineProps<{
   character: {
@@ -28,6 +29,7 @@ const meta = reactive({
 const saving = ref(false)
 const publishing = ref(false)
 const openGroups = ref(new Set<string>())
+const sourceField = ref<DynamicField | null>(null)
 const savedAt = ref<Date | null>(null)
 const autosaveReady = ref(false)
 const syncing = ref(false)
@@ -38,6 +40,8 @@ const className = computed(() => {
   return props.character.system.schemaJson?.classes?.find((item) => item.key === classKey)?.name || classKey
 })
 const isRejected = computed(() => props.character.moderationStatus === 'REJECTED')
+const visibleClassNotes = computed(() => classNotes(props.character.system.schemaJson, draft))
+const selectedFieldSources = computed(() => sourceField.value ? fieldSources(sourceField.value, props.character.system.schemaJson, draft) : [])
 
 const groups = computed(() => {
   const order = ['ATTRIBUTE', 'RESOURCE', 'SKILL', 'TEXT_FIELD', 'NUMERIC_FIELD', 'BOOLEAN_FIELD', 'LIST_FIELD', 'FORMULA', 'ROLL_RULE', 'STATUS_BAR']
@@ -74,6 +78,14 @@ function toggleGroup(category: string) {
   if (next.has(category)) next.delete(category)
   else next.add(category)
   openGroups.value = next
+}
+
+function sourceItems() {
+  return [{ key: 'source', label: 'Origem do valor', icon: Info }]
+}
+
+function handleFieldAction(field: DynamicField, action: string) {
+  if (action === 'source') sourceField.value = field
 }
 
 async function save(silent = false) {
@@ -157,6 +169,15 @@ onBeforeUnmount(() => {
     />
 
     <div class="space-y-5">
+      <AppCard v-if="visibleClassNotes.length" class="border-ember/25 bg-ember/5">
+        <h2 class="text-lg font-black text-white">Textos da classe</h2>
+        <div class="mt-3 space-y-2">
+          <p v-for="item in visibleClassNotes" :key="`${item.level}-${item.note}`" class="rounded-lg border border-white/10 bg-white/[0.04] p-3 text-sm leading-6 text-mist">
+            <b class="text-ember">{{ item.title }} nivel {{ item.level }}:</b> {{ item.note }}
+          </p>
+        </div>
+      </AppCard>
+
       <AppCard v-for="group in groups" :key="group.category">
         <button type="button" class="flex w-full items-center justify-between gap-3 text-left" @click="toggleGroup(group.category)">
           <h2 class="text-lg font-black text-white">{{ categoryLabel(group.category) }}</h2>
@@ -164,10 +185,34 @@ onBeforeUnmount(() => {
         </button>
         <div v-if="isGroupOpen(group.category)" class="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <div v-for="field in group.fields" :key="field.key" class="relative" :class="field.type === 'TEXT' ? 'md:col-span-2 xl:col-span-3' : ''">
+            <div class="absolute right-0 top-0 z-10">
+              <AppActionMenu title="Detalhes do campo" :items="sourceItems()" @select="handleFieldAction(field, $event)" />
+            </div>
             <DynamicFieldRenderer v-model="draft[field.key]" :field="field" :readonly="!editable" />
           </div>
         </div>
       </AppCard>
     </div>
+
+    <Teleport to="body">
+      <div v-if="sourceField" class="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" @click.self="sourceField = null">
+        <div class="w-full max-w-md rounded-xl border border-white/10 bg-panel p-5 shadow-soft">
+          <h2 class="text-xl font-black text-white">Origem de {{ sourceField.label }}</h2>
+          <p class="mt-1 text-sm text-mist">Valor atual: {{ draft[sourceField.key] ?? '-' }}</p>
+          <div class="mt-4 space-y-2">
+            <div v-for="source in selectedFieldSources" :key="`${source.label}-${source.value}`" class="rounded-lg border border-white/10 bg-white/[0.04] p-3">
+              <div class="flex items-center justify-between gap-3">
+                <span class="font-black text-white">{{ source.label }}</span>
+                <span class="text-sm font-black text-ember">{{ source.value }}</span>
+              </div>
+              <p v-if="source.note" class="mt-1 text-xs leading-5 text-mist">{{ source.note }}</p>
+            </div>
+          </div>
+          <div class="mt-5 flex justify-end">
+            <AppButton type="button" variant="ghost" @click="sourceField = null">Fechar</AppButton>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
