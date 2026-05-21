@@ -40,6 +40,7 @@ const className = computed(() => {
   return props.character.system.schemaJson?.classes?.find((item) => item.key === classKey)?.name || classKey
 })
 const isRejected = computed(() => props.character.moderationStatus === 'REJECTED')
+const sheetTexts = computed(() => props.character.system.schemaJson?.sheetTexts || [])
 const visibleClassNotes = computed(() => classNotes(props.character.system.schemaJson, draft))
 const selectedFieldSources = computed(() => sourceField.value ? fieldSources(sourceField.value, props.character.system.schemaJson, draft) : [])
 
@@ -169,6 +170,16 @@ onBeforeUnmount(() => {
     />
 
     <div class="space-y-5">
+      <AppCard v-if="sheetTexts.length">
+        <h2 class="text-lg font-black text-white">Textos da ficha</h2>
+        <div class="mt-3 grid gap-3 md:grid-cols-2">
+          <div v-for="item in sheetTexts" :key="item.id || item.name" class="rounded-lg border border-white/10 bg-white/[0.04] p-3">
+            <p class="text-xs font-black uppercase tracking-[0.12em] text-ember">{{ item.name }}</p>
+            <p class="mt-2 text-sm leading-6 text-mist">{{ item.text }}</p>
+          </div>
+        </div>
+      </AppCard>
+
       <AppCard v-if="visibleClassNotes.length" class="border-ember/25 bg-ember/5">
         <h2 class="text-lg font-black text-white">Textos da classe</h2>
         <div class="mt-3 space-y-2">

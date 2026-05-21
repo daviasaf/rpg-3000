@@ -17,6 +17,7 @@ const schema = ref<SystemSchema>({
   primaryResource: 'vida',
   defaultRoll: '1d20 + atributo',
   categories: ['Atributos', 'Recursos', 'Pericias', 'Classes', 'Textos da ficha'],
+  sheetTexts: [],
   leveling: {
     levelOneAttributePoints: 6,
     attributesPerLevel: 1,
@@ -111,6 +112,12 @@ function validateDraft() {
   })
 
   const fieldKeys = new Set(fields.value.map((field) => keyFromLabel(field.key || field.label || '')))
+  ;(schema.value.sheetTexts || []).forEach((item, index) => {
+    const label = item.name?.trim() || `Texto ${index + 1}`
+    if (!item.name?.trim()) errors.push(`${label}: informe o nome do texto.`)
+    if (!item.text?.trim()) errors.push(`${label}: informe o texto exibido na ficha.`)
+  })
+
   const classKeys = new Set<string>()
   ;(schema.value.classes || []).forEach((rpgClass) => {
     const className = rpgClass.name?.trim() || 'Classe'
@@ -174,6 +181,13 @@ function normalizeSchema(currentSchema: SystemSchema, normalizedFields: DynamicF
   return {
     ...currentSchema,
     primaryResource: keyFromLabel(currentSchema.primaryResource || 'vida'),
+    sheetTexts: (currentSchema.sheetTexts || [])
+      .map((item, index) => ({
+        id: item.id || `sheet_text_${index + 1}`,
+        name: item.name.trim(),
+        text: item.text.trim()
+      }))
+      .filter((item) => item.name && item.text),
     leveling: {
       levelOneAttributePoints: Math.max(0, Math.min(200, Number(currentSchema.leveling?.levelOneAttributePoints ?? 6))),
       attributesPerLevel: Math.max(0, Math.min(100, Number(currentSchema.leveling?.attributesPerLevel ?? 1))),

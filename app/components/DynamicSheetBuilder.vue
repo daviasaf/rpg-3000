@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Plus, Trash2 } from 'lucide-vue-next'
+import { FileText, Plus, SlidersHorizontal, Trash2 } from 'lucide-vue-next'
 import type { DynamicField, FieldCategory, FieldType, SystemClass, SystemClassLevel, SystemClassLevelChange, SystemSchema } from '../../shared/types/system'
 
 const fields = defineModel<DynamicField[]>('fields', { required: true })
@@ -12,7 +12,6 @@ const categories: Record<string, FieldCategory> = {
   Atributos: 'ATTRIBUTE',
   Recursos: 'RESOURCE',
   Pericias: 'SKILL',
-  'Textos da ficha': 'TEXT_FIELD',
   Rolagens: 'ROLL_RULE'
 }
 
@@ -29,6 +28,10 @@ if (!schema.value.leveling) {
     attributeLimitIncreasePerLevel: 1,
     maxAttributeLimit: 20
   }
+}
+
+if (!schema.value.sheetTexts) {
+  schema.value.sheetTexts = []
 }
 
 function keyFromLabel(label: string) {
@@ -57,6 +60,20 @@ function addField(category: FieldCategory) {
 
 function removeField(index: number) {
   fields.value.splice(index, 1)
+}
+
+function addSheetText() {
+  schema.value.sheetTexts ||= []
+  const nextIndex = schema.value.sheetTexts.length + 1
+  schema.value.sheetTexts.push({
+    id: `sheet_text_${Date.now()}_${nextIndex}`,
+    name: `Texto ${nextIndex}`,
+    text: ''
+  })
+}
+
+function removeSheetText(index: number) {
+  schema.value.sheetTexts?.splice(index, 1)
 }
 
 function filtered(category: FieldCategory) {
@@ -116,6 +133,18 @@ function addLevelText(level: SystemClassLevel) {
     operation: 'NOTE',
     note: 'Novo texto de classe para mostrar na ficha.'
   })
+}
+
+function levelActionItems() {
+  return [
+    { key: 'text', label: 'Texto', icon: FileText },
+    { key: 'change', label: 'Alteracao', icon: SlidersHorizontal, disabled: classTargets.value.length === 0 }
+  ]
+}
+
+function handleLevelAction(level: SystemClassLevel, action: string) {
+  if (action === 'text') addLevelText(level)
+  if (action === 'change') addLevelChange(level)
 }
 
 function removeLevelChange(level: SystemClassLevel, index: number) {
@@ -261,6 +290,39 @@ function categoryLabel(category: string) {
       </div>
     </AppCard>
 
+    <AppCard v-else-if="currentStep === 'Textos da ficha'">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <h2 class="text-xl font-black text-white">Textos da ficha</h2>
+          <p class="muted">Textos fixos do sistema exibidos na ficha. Use apenas nome e texto.</p>
+        </div>
+        <AppButton type="button" @click="addSheetText"><Plus class="h-4 w-4" />Adicionar</AppButton>
+      </div>
+
+      <div class="mt-5 space-y-3">
+        <div
+          v-for="(item, index) in schema.sheetTexts"
+          :key="item.id || index"
+          class="grid gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-3 md:grid-cols-[220px_1fr_auto]"
+        >
+          <label>
+            <span class="label">Nome</span>
+            <input v-model="item.name" class="input" placeholder="Origem">
+          </label>
+          <label>
+            <span class="label">Texto</span>
+            <textarea v-model="item.text" rows="2" class="input" placeholder="Cla Mitsudaira" />
+          </label>
+          <button type="button" class="self-end rounded-lg border border-flare/30 p-3 text-flare hover:bg-flare/10" title="Remover texto" @click="removeSheetText(index)">
+            <Trash2 class="h-4 w-4" />
+          </button>
+        </div>
+        <div v-if="!schema.sheetTexts?.length" class="rounded-lg border border-dashed border-white/15 p-8 text-center text-mist">
+          Nenhum texto fixo na ficha ainda.
+        </div>
+      </div>
+    </AppCard>
+
     <AppCard v-else-if="currentStep === 'Classes'">
       <div class="flex items-center justify-between gap-3">
         <div>
@@ -302,10 +364,14 @@ function categoryLabel(category: string) {
             <div v-for="level in rpgClass.levels" :key="level.level" class="rounded-lg border border-white/10 bg-panel/70 p-3">
               <div class="flex items-center justify-between gap-3">
                 <h3 class="font-black text-white">Nivel {{ level.level }}</h3>
-                <div class="flex flex-wrap gap-2">
-                  <AppButton type="button" variant="subtle" @click="addLevelText(level)"><Plus class="h-4 w-4" />Texto</AppButton>
-                  <AppButton type="button" variant="subtle" @click="addLevelChange(level)"><Plus class="h-4 w-4" />Alteracao</AppButton>
-                </div>
+                <AppActionMenu
+                  title="Adicionar ao nivel"
+                  trigger-class="grid h-9 w-9 place-items-center rounded-lg border border-white/10 bg-white/[0.06] text-mist transition hover:border-ember/40 hover:text-ember"
+                  :items="levelActionItems()"
+                  @select="handleLevelAction(level, $event)"
+                >
+                  <Plus class="h-4 w-4" />
+                </AppActionMenu>
               </div>
 
               <div class="mt-3 space-y-2">
@@ -368,6 +434,15 @@ function categoryLabel(category: string) {
           <div v-for="rpgClass in classes" :key="rpgClass.id || rpgClass.key" class="rounded-lg border border-white/10 bg-white/[0.04] p-3">
             <p class="font-black text-white">{{ rpgClass.name }}</p>
             <p class="text-sm text-mist">{{ rpgClass.maxLevel }} niveis | {{ rpgClass.levels.reduce((sum, level) => sum + level.changes.length, 0) }} alteracoes</p>
+          </div>
+        </div>
+      </div>
+      <div v-if="schema.sheetTexts?.length" class="mt-5">
+        <h3 class="text-lg font-black text-white">Textos da ficha</h3>
+        <div class="mt-3 grid gap-4 md:grid-cols-2">
+          <div v-for="item in schema.sheetTexts" :key="item.id || item.name" class="rounded-lg border border-white/10 bg-white/[0.04] p-3">
+            <p class="font-black text-white">{{ item.name }}</p>
+            <p class="mt-1 text-sm leading-6 text-mist">{{ item.text || 'Sem texto.' }}</p>
           </div>
         </div>
       </div>

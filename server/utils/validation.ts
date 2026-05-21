@@ -76,6 +76,11 @@ export const createSystemSchema = z.object({
       defaultRoll: z.string().optional(),
       notes: z.string().optional(),
       categories: z.array(z.string()).optional(),
+      sheetTexts: z.array(z.object({
+        id: z.string().optional(),
+        name: z.string().trim().min(1).max(80),
+        text: z.string().trim().min(1).max(800)
+      })).optional(),
       leveling: z.object({
         attributesPerLevel: z.number().int().min(0).max(100).default(1).optional(),
         levelOneAttributeLimit: z.number().int().min(1).max(100).default(5).optional(),

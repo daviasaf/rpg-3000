@@ -32,6 +32,7 @@ const schema = ref<SystemSchema>({
   defaultRoll: data.value?.system.schemaJson?.defaultRoll || '1d20 + atributo',
   notes: data.value?.system.schemaJson?.notes || '',
   categories: data.value?.system.schemaJson?.categories || ['Atributos', 'Recursos', 'Pericias', 'Classes', 'Textos da ficha'],
+  sheetTexts: data.value?.system.schemaJson?.sheetTexts || [],
   leveling: {
     levelOneAttributePoints: data.value?.system.schemaJson?.leveling?.levelOneAttributePoints ?? 6,
     attributesPerLevel: data.value?.system.schemaJson?.leveling?.attributesPerLevel ?? 1,
@@ -96,6 +97,12 @@ function validateDraft() {
   if (fields.value.length === 0) errors.push('Crie pelo menos um campo para a ficha.')
 
   const seenKeys = new Set<string>()
+  ;(schema.value.sheetTexts || []).forEach((item, index) => {
+    const label = item.name?.trim() || `Texto ${index + 1}`
+    if (!item.name?.trim()) errors.push(`${label}: informe o nome do texto.`)
+    if (!item.text?.trim()) errors.push(`${label}: informe o texto exibido na ficha.`)
+  })
+
   fields.value.forEach((field, index) => {
     const fieldName = field.label?.trim() || `Campo ${index + 1}`
     const key = keyFromLabel(field.key || field.label || '')
@@ -138,6 +145,13 @@ function normalizeSchema(currentSchema: SystemSchema, normalizedFields: DynamicF
   return {
     ...currentSchema,
     primaryResource: keyFromLabel(currentSchema.primaryResource || 'vida'),
+    sheetTexts: (currentSchema.sheetTexts || [])
+      .map((item, index) => ({
+        id: item.id || `sheet_text_${index + 1}`,
+        name: item.name.trim(),
+        text: item.text.trim()
+      }))
+      .filter((item) => item.name && item.text),
     leveling: {
       levelOneAttributePoints: Math.max(0, Math.min(200, Number(currentSchema.leveling?.levelOneAttributePoints ?? 6))),
       attributesPerLevel: Math.max(0, Math.min(100, Number(currentSchema.leveling?.attributesPerLevel ?? 1))),

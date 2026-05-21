@@ -29,6 +29,11 @@ export interface SystemSchema {
   defaultRoll?: string
   notes?: string
   categories?: string[]
+  sheetTexts?: Array<{
+    id?: string
+    name: string
+    text: string
+  }>
   leveling?: {
     attributesPerLevel?: number
     levelOneAttributeLimit?: number
