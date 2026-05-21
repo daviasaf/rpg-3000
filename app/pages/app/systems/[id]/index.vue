@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ArrowLeft, Edit3, ExternalLink, Heart, MessageCircle, PlusCircle, Settings, UserPlus } from 'lucide-vue-next'
-import type { SystemSchema } from '../../../../shared/types/system'
+import type { SystemSchema } from '../../../../../shared/types/system'
 
 definePageMeta({ layout: 'app', middleware: 'auth' })
 

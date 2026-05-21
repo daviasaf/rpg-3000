@@ -17,6 +17,9 @@ export default defineEventHandler(async (event) => {
   if (!profile) {
     throw createError({ statusCode: 404, statusMessage: 'Perfil nao encontrado.' })
   }
+  if (profileId === user.id) {
+    throw createError({ statusCode: 403, statusMessage: 'O perfil mostra comentarios recebidos de outras pessoas.' })
+  }
 
   const comment = await prisma.profileWallComment.create({
     data: {

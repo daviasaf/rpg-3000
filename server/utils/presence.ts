@@ -6,7 +6,7 @@ type PresenceEntry = {
   lastSeen: number
 }
 
-const staleAfterMs = 18000
+const staleAfterMs = 60000
 const presenceStore = globalThis as typeof globalThis & {
   __centralRpgPresence?: Map<string, PresenceEntry>
 }
@@ -23,6 +23,7 @@ export function setRoomPresence(roomId: string, userId: string, name: string, on
   const previous = roomPresence.get(key)
   const now = Date.now()
   const wasOnline = Boolean(previous?.online && now - previous.lastSeen < staleAfterMs)
+  const changed = online ? !wasOnline : wasOnline
   const next: PresenceEntry = {
     roomId,
     userId,
@@ -36,7 +37,7 @@ export function setRoomPresence(roomId: string, userId: string, name: string, on
   return {
     previous,
     next,
-    changed: wasOnline !== online
+    changed
   }
 }
 

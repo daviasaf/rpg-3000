@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { Heart, MessageCircle } from 'lucide-vue-next'
-
 type SocialUser = { id: string; name: string; username?: string | null; avatarUrl?: string | null; profileColor?: string | null }
 type ProfilePost = {
   id: string
@@ -22,9 +20,7 @@ const props = defineProps<{
   ownProfile?: boolean
 }>()
 const emit = defineEmits<{ refresh: [] }>()
-const { push, apiError } = useToast()
 const auth = useAuthStore()
-const expanded = ref(new Set<string>())
 
 const publicItems = computed(() => [
   ...(props.systems || []),
@@ -35,27 +31,6 @@ const publicItems = computed(() => [
 function profileHandle(profile?: SocialUser) {
   return profile?.username ? `@${profile.username}` : 'usuario sem identificador publico'
 }
-
-function isOpen(id: string) {
-  return expanded.value.has(id)
-}
-
-function toggle(id: string) {
-  const next = new Set(expanded.value)
-  next.has(id) ? next.delete(id) : next.add(id)
-  expanded.value = next
-}
-
-async function like(postId: string) {
-  try {
-    const response = await $fetch<{ liked: boolean }>(`/api/social/profile/posts/${postId}/like`, { method: 'POST' })
-    push(response.liked ? 'Curtida adicionada.' : 'Curtida removida.', 'success')
-    emit('refresh')
-  } catch (error) {
-    apiError(error, 'Erro ao curtir.')
-  }
-}
-
 </script>
 
 <template>
@@ -71,7 +46,7 @@ async function like(postId: string) {
         </div>
         </div>
         <div class="flex flex-wrap gap-2">
-          <span class="kbd-chip">{{ posts.length }} posts</span>
+          <span class="kbd-chip">{{ publicItems.length }} criacoes</span>
           <span class="kbd-chip">{{ profileComments?.length || 0 }} comentarios</span>
         </div>
       </div>
@@ -119,39 +94,12 @@ async function like(postId: string) {
           :endpoint="`/api/social/profile/${profile.id}/comments`"
           :current-user-id="auth.user?.id"
           :can-delete-all="ownProfile"
+          :can-create="!ownProfile"
           placeholder="Comentar neste perfil..."
-          empty-text="Nenhum comentario publico neste perfil ainda."
+          :empty-text="ownProfile ? 'Nenhum comentario recebido no seu perfil ainda.' : 'Nenhum comentario publico neste perfil ainda.'"
           @refresh="emit('refresh')"
         />
       </div>
     </AppCard>
-
-    <article v-for="post in posts" :key="post.id" class="surface rounded-lg p-4">
-      <button type="button" class="w-full text-left" @click="toggle(post.id)">
-        <p class="whitespace-pre-wrap text-sm leading-6 text-white" :class="isOpen(post.id) ? '' : 'line-clamp-2'">{{ post.content }}</p>
-        <p class="mt-2 text-xs text-mist">{{ new Date(post.createdAt).toLocaleString('pt-BR') }}</p>
-      </button>
-      <div class="mt-3 flex gap-2">
-        <button class="inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/10 px-3 text-sm font-bold text-white hover:border-ember/40" @click="like(post.id)">
-          <Heart class="h-4 w-4" />{{ post._count?.likes || 0 }}
-        </button>
-        <button class="inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/10 px-3 text-sm font-bold text-mist" @click="toggle(post.id)">
-          <MessageCircle class="h-4 w-4" />{{ post._count?.comments || 0 }}
-        </button>
-      </div>
-      <div v-if="isOpen(post.id)">
-        <div class="mt-4">
-          <AppCommentThread
-            :comments="post.comments"
-            :endpoint="`/api/social/profile/posts/${post.id}/comments`"
-            :current-user-id="auth.user?.id"
-            :can-delete-all="ownProfile"
-            @refresh="emit('refresh')"
-          />
-        </div>
-      </div>
-    </article>
-
-    <EmptyState v-if="!posts.length" title="Nenhum post publico" description="As postagens publicas aparecem aqui." />
   </div>
 </template>

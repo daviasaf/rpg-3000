@@ -39,6 +39,16 @@ export default defineEventHandler(async (event) => {
   const safeRoom = room
     ? {
         ...room,
+        npcs: room.masterId === user.id
+          ? await prisma.npc.findMany({
+              where: {
+                createdById: room.masterId
+              },
+              select: { id: true, name: true, avatarUrl: true, description: true },
+              orderBy: { updatedAt: 'desc' },
+              take: 60
+            })
+          : [],
         members: room.members.map((member) => {
           const canSeeSheet = room.masterId === user.id || member.userId === user.id
 

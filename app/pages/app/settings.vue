@@ -9,7 +9,6 @@ const { push, apiError } = useToast()
 const openSection = ref('')
 const theme = ref('dark')
 const saving = ref('')
-const verificationUrl = ref('')
 const errors = ref<string[]>([])
 const profile = reactive({
   name: '',
@@ -20,6 +19,19 @@ const profile = reactive({
   currentPassword: '',
   newPassword: ''
 })
+
+const accentPresets = [
+  '#ff8a13',
+  '#f97316',
+  '#facc15',
+  '#22c55e',
+  '#14b8a6',
+  '#38bdf8',
+  '#6366f1',
+  '#a855f7',
+  '#ec4899',
+  '#ef4444'
+]
 
 const sections = [
   { key: 'personal', label: 'Dados pessoais', icon: UserRound },
@@ -91,7 +103,6 @@ function payloadFor(key: string) {
 }
 
 async function saveSection(key: string) {
-  verificationUrl.value = ''
   if (!validate(key)) {
     push('Corrija os campos antes de salvar.', 'error')
     return
@@ -99,14 +110,13 @@ async function saveSection(key: string) {
 
   saving.value = key
   try {
-    const response = await $fetch<{ user: NonNullable<typeof auth.user>; pendingVerification?: boolean; verificationUrl?: string }>('/api/auth/profile', {
+    const response = await $fetch<{ user: NonNullable<typeof auth.user>; pendingVerification?: boolean }>('/api/auth/profile', {
       method: 'PUT',
       body: payloadFor(key)
     })
     auth.setUser(response.user)
     profile.currentPassword = ''
     profile.newPassword = ''
-    verificationUrl.value = response.verificationUrl || ''
     push(response.pendingVerification ? 'Confirme a alteracao pelo e-mail.' : 'Configuracao atualizada.', 'success')
     if (!response.pendingVerification) openSection.value = ''
   } catch (error) {
@@ -175,7 +185,24 @@ async function saveSection(key: string) {
           </div>
           <div v-if="section.key === 'visual'" class="grid gap-3 md:grid-cols-2">
             <label><span class="label">Tema</span><select v-model="theme" class="select"><option value="dark">Dark</option><option value="light">Light</option></select></label>
-            <label><span class="label">Cor de destaque</span><input v-model="profile.profileColor" class="input h-10" type="color"></label>
+            <div>
+              <span class="label">Cor de destaque</span>
+              <div class="grid grid-cols-5 gap-2 sm:grid-cols-10 md:grid-cols-5 lg:grid-cols-10">
+                <button
+                  v-for="color in accentPresets"
+                  :key="color"
+                  type="button"
+                  class="h-10 rounded-lg border transition hover:scale-[1.03]"
+                  :class="profile.profileColor === color ? 'border-white ring-2 ring-ember/70' : 'border-white/10'"
+                  :style="{ backgroundColor: color }"
+                  :title="color"
+                  @click="profile.profileColor = color"
+                />
+              </div>
+              <p v-if="!accentPresets.includes(profile.profileColor)" class="mt-2 rounded-lg border border-white/10 bg-white/[0.04] p-2 text-xs text-mist">
+                Cor atual personalizada mantida: <b class="text-white">{{ profile.profileColor }}</b>
+              </p>
+            </div>
           </div>
 
           <div class="mt-4 flex justify-end">
@@ -184,11 +211,5 @@ async function saveSection(key: string) {
         </form>
       </AppCard>
     </div>
-
-    <AppCard v-if="verificationUrl" class="border-ember/30 bg-ember/10">
-      <h2 class="text-lg font-black text-white">Verificacao local</h2>
-      <p class="mt-1 text-sm text-mist">Gmail nao configurado ou ambiente local: use este link para confirmar a alteracao.</p>
-      <NuxtLink :to="verificationUrl" external class="mt-3 block break-all text-sm font-bold text-ember">{{ verificationUrl }}</NuxtLink>
-    </AppCard>
   </div>
 </template>

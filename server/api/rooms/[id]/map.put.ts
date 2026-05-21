@@ -43,13 +43,36 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const previousMap = access.mapJson as { tokens?: Array<{ id: string; name: string; x: number; y: number }> } | null
+  if (isMaster) {
+    const npcIds = [...new Set(input.tokens
+      .filter((token) => token.kind === 'NPC')
+      .map((token) => token.id.replace(/^npc:/, ''))
+      .filter(Boolean))]
+
+    if (npcIds.length) {
+      const count = await prisma.npc.count({
+        where: {
+          id: { in: npcIds },
+          createdById: access.masterId
+        }
+      })
+
+      if (count !== npcIds.length) {
+        throw createError({ statusCode: 403, statusMessage: 'NPC indisponivel para esta sala.' })
+      }
+    }
+  }
+
+  const previousMap = access.mapJson as { columns?: number; rows?: number; tokens?: Array<z.infer<typeof tokenSchema>> } | null
   const previousToken = movedToken ? previousMap?.tokens?.find((token) => token.id === movedToken.id) : null
   const didMove = Boolean(movedToken && previousToken && (previousToken.x !== movedToken.x || previousToken.y !== movedToken.y))
+  const tokens = !isMaster && previousMap?.tokens?.length
+    ? previousMap.tokens.map((token) => token.id === movedToken?.id && movedToken ? movedToken : token)
+    : input.tokens
   const mapState = {
-    columns: input.columns,
-    rows: input.rows,
-    tokens: input.tokens.map((token) => token.id === movedToken?.id && didMove
+    columns: isMaster ? input.columns : previousMap?.columns || input.columns,
+    rows: isMaster ? input.rows : previousMap?.rows || input.rows,
+    tokens: tokens.map((token) => token.id === movedToken?.id && didMove
       ? { ...token, previousX: previousToken?.x ?? token.previousX ?? null, previousY: previousToken?.y ?? token.previousY ?? null }
       : token)
   }

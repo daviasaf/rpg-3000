@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { MoreHorizontal, Send } from 'lucide-vue-next'
+import { Pencil, Send, Trash2 } from 'lucide-vue-next'
 
 type CommentAuthor = {
   id?: string | null
@@ -25,18 +25,21 @@ const props = withDefaults(defineProps<{
   placeholder?: string
   emptyText?: string
   maxHeight?: boolean
+  canCreate?: boolean
 }>(), {
   placeholder: 'Comentar...',
   emptyText: 'Nenhum comentario ainda.',
-  maxHeight: true
+  maxHeight: true,
+  canCreate: true
 })
 
 const emit = defineEmits<{ refresh: [] }>()
 const { push, apiError } = useToast()
 const draft = ref('')
 const sending = ref(false)
-const menuKey = ref('')
 const editing = ref<{ id: string; content: string } | null>(null)
+const pendingDeleteId = ref('')
+const deleting = ref(false)
 
 function formatDate(value: string) {
   return new Date(value).toLocaleString('pt-BR', {
@@ -95,26 +98,47 @@ async function save() {
   }
 }
 
-async function remove(id: string) {
+function actionItems(item: CommentItem) {
+  return [
+    ...(canEdit(item) ? [{ key: 'edit', label: 'Editar', icon: Pencil }] : []),
+    { key: 'delete', label: 'Apagar', icon: Trash2, danger: true }
+  ]
+}
+
+function handleAction(item: CommentItem, action: string) {
+  if (action === 'edit') {
+    editing.value = { id: item.id, content: item.content }
+    return
+  }
+
+  if (action === 'delete') pendingDeleteId.value = item.id
+}
+
+async function remove() {
+  if (!pendingDeleteId.value) return
+
+  deleting.value = true
   try {
-    await $fetch(commentUrl(id), { method: 'DELETE' })
-    menuKey.value = ''
+    await $fetch(commentUrl(pendingDeleteId.value), { method: 'DELETE' })
+    pendingDeleteId.value = ''
     push('Comentario apagado.', 'success')
     emit('refresh')
   } catch (error) {
     apiError(error, 'Nao foi possivel apagar o comentario.')
+  } finally {
+    deleting.value = false
   }
 }
 </script>
 
 <template>
   <div>
-    <form class="flex flex-col gap-2 sm:flex-row" @submit.prevent="submit">
+    <form v-if="canCreate" class="flex flex-col gap-2 sm:flex-row" @submit.prevent="submit">
       <input v-model="draft" class="input" :placeholder="placeholder">
       <AppButton type="submit" :loading="sending"><Send class="h-4 w-4" />Enviar</AppButton>
     </form>
 
-    <div class="mt-3 space-y-2" :class="maxHeight && comments.length > 5 ? 'max-h-80 overflow-y-auto pr-2' : ''">
+    <div class="space-y-2" :class="[canCreate ? 'mt-3' : '', maxHeight && comments.length > 5 ? 'max-h-80 overflow-y-auto pr-2' : '']">
       <div v-for="item in comments" :key="item.id" class="soft-row relative flex gap-3 p-3 pr-12">
         <AppAvatar :name="authorName(item.user)" :src="item.user?.avatarUrl" :color="item.user?.profileColor" rounded="full" size="sm" />
         <div class="min-w-0 flex-1 text-sm text-mist">
@@ -129,16 +153,20 @@ async function remove(id: string) {
 
         <div v-if="canDelete(item)" class="absolute right-3 top-3">
           <button v-if="editing?.id === item.id" type="button" class="text-xs font-bold text-ember" @click="save">Salvar</button>
-          <button v-else type="button" class="rounded-md p-1 text-mist hover:bg-white/10 hover:text-white" title="Acoes do comentario" @click="menuKey = menuKey === item.id ? '' : item.id">
-            <MoreHorizontal class="h-4 w-4" />
-          </button>
-          <div v-if="menuKey === item.id" class="absolute right-0 top-7 z-50 w-32 rounded-lg border border-white/10 bg-panel p-1 shadow-soft">
-            <button v-if="canEdit(item)" type="button" class="block w-full rounded-md px-3 py-2 text-left text-xs font-bold text-white hover:bg-white/10" @click="editing = { id: item.id, content: item.content }; menuKey = ''">Editar</button>
-            <button type="button" class="block w-full rounded-md px-3 py-2 text-left text-xs font-bold text-red-100 hover:bg-flare/15" @click="remove(item.id)">Apagar</button>
-          </div>
+          <AppActionMenu v-else title="Acoes do comentario" :items="actionItems(item)" @select="handleAction(item, $event)" />
         </div>
       </div>
       <p v-if="!comments.length" class="rounded-lg border border-dashed border-white/15 p-4 text-sm text-mist">{{ emptyText }}</p>
     </div>
+
+    <ConfirmModal
+      :open="!!pendingDeleteId"
+      title="Apagar comentario"
+      message="Tem certeza que deseja apagar este comentario? Esta acao nao pode ser desfeita."
+      confirm-label="Apagar"
+      :loading="deleting"
+      @close="pendingDeleteId = ''"
+      @confirm="remove"
+    />
   </div>
 </template>

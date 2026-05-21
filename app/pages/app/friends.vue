@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Check, MessageCircle, Search, UserMinus, UserPlus, X } from 'lucide-vue-next'
+import { Check, MessageCircle, Search, UserMinus, UserPlus, UserRound, X } from 'lucide-vue-next'
 
 definePageMeta({ layout: 'app', middleware: 'auth' })
 
@@ -9,6 +9,8 @@ type FriendRequest = { id: string; status: string; sender?: SocialUser; receiver
 const { push, apiError } = useToast()
 const q = ref('')
 const selectedFriend = ref<SocialUser | null>(null)
+const friendMenuTarget = ref<SocialUser | null>(null)
+const removingFriend = ref(false)
 const message = ref('')
 const { data, refresh } = await useFetch<{ friends: SocialUser[]; sent: FriendRequest[]; received: FriendRequest[] }>('/api/social/friends', { default: () => ({ friends: [], sent: [], received: [] }) })
 const { data: searchData, refresh: searchUsers } = await useFetch<{ users: SocialUser[] }>(() => `/api/social/users?q=${encodeURIComponent(q.value)}`, { immediate: false, watch: false, default: () => ({ users: [] }) })
@@ -71,15 +73,39 @@ function cleanMessage(content: string) {
   return content.replace(/\[convite:[^\]]+\]\s*/, '').replace(/\s*Acesse:\s*\/app\/rooms\/join\?code=[A-Z0-9-]+/i, '').trim()
 }
 
-async function removeFriend(friend: SocialUser) {
-  if (!friend.id || !confirm(`Remover ${friend.name} da sua lista de amigos?`)) return
+const friendActionItems = [
+  { key: 'profile', label: 'Ver perfil', icon: UserRound },
+  { key: 'message', label: 'Enviar mensagem', icon: MessageCircle },
+  { key: 'remove', label: 'Remover amizade', icon: UserMinus, danger: true }
+]
+
+async function handleFriendAction(friend: SocialUser, action: string) {
+  if (action === 'profile') {
+    await navigateTo(`/app/profiles/${friend.id}`)
+    return
+  }
+  if (action === 'message') {
+    await openChat(friend)
+    return
+  }
+  if (action === 'remove') friendMenuTarget.value = friend
+}
+
+async function removeFriend() {
+  const friend = friendMenuTarget.value
+  if (!friend?.id) return
+
+  removingFriend.value = true
   try {
     await $fetch(`/api/social/friends/${friend.id}`, { method: 'DELETE' })
     if (selectedFriend.value?.id === friend.id) selectedFriend.value = null
+    friendMenuTarget.value = null
     push('Amizade removida.', 'success')
     await refresh()
   } catch (error) {
     apiError(error, 'Nao foi possivel remover amizade.')
+  } finally {
+    removingFriend.value = false
   }
 }
 </script>
@@ -132,17 +158,27 @@ async function removeFriend(friend: SocialUser) {
         <AppCard>
           <h2 class="font-black text-white">Amigos</h2>
           <div class="mt-3 space-y-2">
-            <div v-for="friend in data.friends" :key="friend.id" class="soft-row flex w-full items-center gap-3 p-3 text-left">
-              <button type="button" class="flex min-w-0 flex-1 items-center gap-3 text-left" @click="openChat(friend)">
-              <AppAvatar :name="friend.name" :src="friend.avatarUrl" :color="friend.profileColor" rounded="full" />
-              <span class="min-w-0 flex-1">
-                <NuxtLink :to="`/app/profiles/${friend.id}`" class="block truncate font-black text-white hover:text-ember" @click.stop>{{ friend.name }}</NuxtLink>
-                <span class="block truncate text-xs text-mist">{{ friend.username ? `@${friend.username}` : 'sem usuario publico' }}</span>
-              </span>
-              <MessageCircle class="h-4 w-4 text-ember" />
-              </button>
-              <button type="button" class="grid h-8 w-8 place-items-center rounded-md text-mist hover:bg-white/10 hover:text-red-100" title="Remover amizade" @click.stop="removeFriend(friend)">
-                <UserMinus class="h-4 w-4" />
+            <div
+              v-for="friend in data.friends"
+              :key="friend.id"
+              class="soft-row flex w-full items-center gap-3 p-3 text-left"
+              :class="selectedFriend?.id === friend.id ? 'border-ember/40 bg-ember/10' : ''"
+            >
+              <AppActionMenu
+                class="min-w-0 flex-1"
+                trigger-class="flex w-full min-w-0 items-center gap-3 rounded-lg p-1 text-left transition hover:bg-white/[0.04]"
+                :items="friendActionItems"
+                title="Acoes do amigo"
+                @select="handleFriendAction(friend, $event)"
+              >
+                <AppAvatar :name="friend.name" :src="friend.avatarUrl" :color="friend.profileColor" rounded="full" />
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate font-black text-white">{{ friend.name }}</span>
+                  <span class="block truncate text-xs text-mist">{{ friend.username ? `@${friend.username}` : 'sem usuario publico' }}</span>
+                </span>
+              </AppActionMenu>
+              <button type="button" class="grid h-9 w-9 place-items-center rounded-lg text-ember hover:bg-white/10" title="Enviar mensagem" @click="openChat(friend)">
+                <MessageCircle class="h-4 w-4" />
               </button>
             </div>
             <EmptyState v-if="!data.friends.length" title="Nenhum amigo ainda" description="Busque jogadores pelo nome, usuario ou email para iniciar sua rede." />
@@ -172,5 +208,14 @@ async function removeFriend(friend: SocialUser) {
         </form>
       </AppCard>
     </section>
+    <ConfirmModal
+      :open="!!friendMenuTarget"
+      title="Remover amizade"
+      :message="`Remover ${friendMenuTarget?.name || 'este amigo'} da sua lista? O chat privado sera fechado se depender da amizade.`"
+      confirm-label="Remover"
+      :loading="removingFriend"
+      @close="friendMenuTarget = null"
+      @confirm="removeFriend"
+    />
   </div>
 </template>

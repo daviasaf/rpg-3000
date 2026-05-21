@@ -5,9 +5,15 @@ definePageMeta({ layout: 'app', middleware: 'auth' })
 
 const route = useRoute()
 const { push, apiError } = useToast()
+const removeOpen = ref(false)
+const removingFriend = ref(false)
 const { data, refresh } = await useFetch<any>(`/api/social/profile/${route.params.id}`, {
   default: () => ({ profile: {}, posts: [], profileComments: [], systems: [], npcs: [], characters: [], social: {} })
 })
+
+const friendActionItems = [
+  { key: 'remove', label: 'Remover amizade', icon: UserMinus, danger: true }
+]
 
 async function addFriend() {
   try {
@@ -32,14 +38,17 @@ async function acceptRequest() {
 
 async function removeFriend() {
   if (!data.value.profile?.id || data.value.social?.isSelf) return
-  if (!confirm(`Remover ${data.value.profile.name} da sua lista de amigos?`)) return
 
+  removingFriend.value = true
   try {
     await $fetch(`/api/social/friends/${data.value.profile.id}`, { method: 'DELETE' })
+    removeOpen.value = false
     push('Amizade removida.', 'success')
     await refresh()
   } catch (error) {
     apiError(error, 'Erro ao remover amizade.')
+  } finally {
+    removingFriend.value = false
   }
 }
 </script>
@@ -50,7 +59,7 @@ async function removeFriend() {
       <NuxtLink v-if="data.social?.isFriend" :to="`/app/friends?chat=${data.profile.id}`">
         <AppButton><MessageCircle class="h-4 w-4" />Mensagem</AppButton>
       </NuxtLink>
-      <AppButton v-if="data.social?.isFriend" variant="ghost" @click="removeFriend"><UserMinus class="h-4 w-4" />Remover amizade</AppButton>
+      <AppActionMenu v-if="data.social?.isFriend" :items="friendActionItems" title="Acoes sociais" @select="removeOpen = true" />
       <AppButton v-else-if="data.social?.receivedRequestId" @click="acceptRequest"><Check class="h-4 w-4" />Aceitar amizade</AppButton>
       <AppButton v-else-if="!data.social?.sentRequestId" @click="addFriend"><UserPlus class="h-4 w-4" />Pedir amizade</AppButton>
       <span v-else class="inline-flex min-h-10 items-center rounded-lg border border-white/10 px-3 text-sm font-bold text-mist">Solicitacao enviada</span>
@@ -65,6 +74,15 @@ async function removeFriend() {
       :characters="data.characters"
       :own-profile="data.social?.isSelf"
       @refresh="refresh"
+    />
+    <ConfirmModal
+      :open="removeOpen"
+      title="Remover amizade"
+      :message="`Remover ${data.profile?.name || 'este usuario'} da sua lista de amigos?`"
+      confirm-label="Remover"
+      :loading="removingFriend"
+      @close="removeOpen = false"
+      @confirm="removeFriend"
     />
   </div>
 </template>

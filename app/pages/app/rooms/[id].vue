@@ -5,6 +5,7 @@ import type { SystemSchema } from '../../../../shared/types/system'
 definePageMeta({ layout: 'app', middleware: 'auth' })
 
 const route = useRoute()
+const router = useRouter()
 const auth = useAuthStore()
 const chat = ref<{ load: () => Promise<void> } | null>(null)
 const { push, apiError } = useToast()
@@ -26,6 +27,7 @@ const { data, refresh, error } = await useFetch<{ room: {
     fields: Array<{ key: string; label: string; type: string; category: string }>
   }
   sessions: Array<{ id: string; status: string }>
+  npcs?: Array<{ id: string; name: string; avatarUrl?: string | null; description?: string | null }>
   members: Array<{ id: string; role: string; user?: { id: string; name: string; profileColor?: string | null }; character?: {
     id: string
     name: string
@@ -158,7 +160,7 @@ async function loadPresence() {
   }
 }
 
-async function setPresence(online: boolean, refreshChat = true) {
+async function setPresence(online: boolean, refreshChat = false) {
   if (!data.value?.room.id) return
   try {
     await $fetch(`/api/rooms/${data.value.room.id}/presence`, {
@@ -166,6 +168,11 @@ async function setPresence(online: boolean, refreshChat = true) {
       body: { online }
     })
     if (leavingRoom) return
+    if (online && auth.user?.id) {
+      const next = new Set(onlineUserIds.value)
+      next.add(auth.user.id)
+      onlineUserIds.value = next
+    }
     await loadPresence()
     if (refreshChat) await chat.value?.load()
   } catch {
@@ -268,13 +275,18 @@ async function sendInvites() {
 
 onMounted(() => {
   userAccent.value = auth.user?.profileColor || localStorage.getItem('central-rpg:accent') || '#ff8a13'
-  setPresence(true)
+  if (route.query.settings === '1') {
+    settingsOpen.value = true
+    const nextQuery = { ...route.query }
+    delete nextQuery.settings
+    void router.replace({ query: nextQuery })
+  }
+  setPresence(true, true)
   loadPresence()
   roomTimer = setInterval(refresh, 5000)
   presenceTimer = setInterval(() => {
     setPresence(true)
-    loadPresence()
-  }, 8000)
+  }, 15000)
 })
 
 onBeforeUnmount(() => {
@@ -319,6 +331,7 @@ onBeforeUnmount(() => {
       :room-id="data.room.id"
       :model-value="data.room.mapJson"
       :members="data.room.members"
+      :npcs="data.room.npcs || []"
       :current-user-id="auth.user?.id"
       :is-master="isMaster"
       @saved="reloadTable"

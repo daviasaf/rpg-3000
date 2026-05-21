@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ArrowLeft, Settings } from 'lucide-vue-next'
-import type { SystemSchema } from '../../../../shared/types/system'
+import { ArrowLeft, Edit3, Settings } from 'lucide-vue-next'
+import type { SystemSchema } from '../../../../../shared/types/system'
 
 definePageMeta({ layout: 'app', middleware: 'auth' })
 
@@ -48,6 +48,10 @@ async function deleteCharacter() {
           <Settings class="h-5 w-5" />
         </button>
         <div v-if="settingsOpen" class="absolute right-0 top-12 z-10 w-48 rounded-lg border border-white/10 bg-panel p-1 shadow-soft">
+          <NuxtLink v-if="data.character.moderationStatus !== 'REJECTED'" :to="`/app/characters/${data.character.id}/edit`" class="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-bold text-white hover:bg-white/10">
+            <Edit3 class="h-4 w-4" />
+            Editar
+          </NuxtLink>
           <button type="button" class="block w-full rounded-md px-3 py-2 text-left text-sm font-bold text-red-100 hover:bg-flare/15" @click="confirmDeleteOpen = true; settingsOpen = false">Apagar personagem</button>
         </div>
       </div>

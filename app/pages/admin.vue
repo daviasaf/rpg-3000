@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import {
   Activity,
-  BarChart3,
   BookOpen,
   Bot,
   CheckCircle2,
@@ -71,6 +70,8 @@ const q = ref('')
 const userSearch = ref('')
 const expanded = ref(new Set<string>())
 const technicalOpen = ref('')
+const deletingUserId = ref('')
+const pendingDeleteUser = ref<AdminUser | null>(null)
 
 const { data: moderationData, refresh: refreshModeration, error } = await useFetch<{ posts: AdminPost[] }>(() => `/api/admin/moderation?status=${status.value}`, {
   immediate: false,
@@ -141,6 +142,7 @@ const moderationCounts = computed(() => ({
   npcs: (moderationData.value?.posts || []).filter((post) => post.type === 'NPC').length,
   characters: (moderationData.value?.posts || []).filter((post) => post.type === 'CHARACTER').length
 }))
+const launchedTotal = computed(() => (overview.value?.series?.communityPosts || []).reduce((sum: number, item: SeriesPoint) => sum + item.value, 0))
 
 async function refreshAll() {
   await Promise.all([refreshOverview(), refreshUsers(), refreshModeration()])
@@ -183,6 +185,31 @@ async function deletePost(id: string) {
     await refreshAll()
   } catch (error) {
     apiError(error, 'Nao foi possivel apagar o item.')
+  }
+}
+
+const userActionItems = computed(() => [
+  { key: 'delete', label: 'Excluir usuario', icon: Trash2, danger: true, disabled: Boolean(deletingUserId.value) }
+])
+
+function handleUserAction(user: AdminUser, action: string) {
+  if (action === 'delete') pendingDeleteUser.value = user
+}
+
+async function deleteUser() {
+  const user = pendingDeleteUser.value
+  if (!user) return
+
+  deletingUserId.value = user.id
+  try {
+    await $fetch(`/api/admin/users/${user.id}`, { method: 'DELETE' })
+    pendingDeleteUser.value = null
+    push('Usuario excluido.', 'success')
+    await Promise.all([refreshUsers(), refreshOverview()])
+  } catch (error) {
+    apiError(error, 'Nao foi possivel excluir o usuario.')
+  } finally {
+    deletingUserId.value = ''
   }
 }
 
@@ -236,6 +263,11 @@ function linePoints(series?: SeriesPoint[]) {
     return `${x.toFixed(2)},${y.toFixed(2)}`
   }).join(' ')
 }
+
+function showChartLabel(index: number, total?: number) {
+  if (!total) return false
+  return index === 0 || index === total - 1 || index % 3 === 0
+}
 </script>
 
 <template>
@@ -275,12 +307,6 @@ function linePoints(series?: SeriesPoint[]) {
             <span class="rounded-md px-1.5 py-0.5 text-xs" :class="view === item.id ? 'bg-black/15' : 'bg-white/10 text-mist'">{{ item.badge }}</span>
           </button>
         </nav>
-
-        <div class="mt-6 grid gap-2 rounded-lg border border-white/10 bg-white/[0.035] p-3 text-xs text-mist">
-          <div class="flex items-center justify-between"><span>Pendentes</span><b class="text-amber-100">{{ overview.moderation?.pending || 0 }}</b></div>
-          <div class="flex items-center justify-between"><span>Aprovados</span><b class="text-emerald-100">{{ overview.moderation?.approved || 0 }}</b></div>
-          <div class="flex items-center justify-between"><span>Rejeitados</span><b class="text-red-100">{{ overview.moderation?.rejected || 0 }}</b></div>
-        </div>
 
         <button type="button" class="mt-auto flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-bold text-mist hover:bg-white/10 hover:text-white" @click="logout"><LogOut class="h-4 w-4" /> Sair</button>
       </aside>
@@ -353,14 +379,21 @@ function linePoints(series?: SeriesPoint[]) {
               <AppCard>
                 <h2 class="font-black text-white">Conteudo lancado</h2>
                 <p class="mt-1 text-sm text-mist">Snapshots enviados para comunidade nos ultimos 14 dias.</p>
-                <div class="mt-5 h-72">
+                <div v-if="launchedTotal > 0" class="mt-5 h-64">
                   <div class="flex h-full items-end gap-3">
-                    <div v-for="point in overview.series?.communityPosts" :key="point.key" class="flex min-w-0 flex-1 flex-col items-center gap-2">
-                      <div class="relative h-full w-full rounded-lg bg-white/[0.04]">
-                        <div class="absolute bottom-0 left-0 right-0 rounded-lg bg-ember/80" :style="{ height: barHeight(point.value, overview.series?.communityPosts) }" />
+                    <div v-for="(point, index) in overview.series?.communityPosts" :key="point.key" class="flex min-w-0 flex-1 flex-col items-center gap-2">
+                      <div class="relative h-full w-full overflow-hidden rounded-lg bg-white/[0.04]">
+                        <div class="absolute bottom-0 left-0 right-0 rounded-lg bg-ember/80 transition-all" :style="{ height: barHeight(point.value, overview.series?.communityPosts) }" />
                       </div>
-                      <span class="text-[10px] text-mist">{{ point.label }}</span>
+                      <span class="h-3 text-[10px] text-mist">{{ showChartLabel(index, overview.series?.communityPosts?.length) ? point.label : '' }}</span>
                     </div>
+                  </div>
+                </div>
+                <div v-else class="mt-5 grid min-h-44 place-items-center rounded-lg border border-dashed border-white/15 bg-white/[0.025] p-5 text-center">
+                  <div>
+                    <FileText class="mx-auto h-8 w-8 text-mist" />
+                    <p class="mt-3 font-black text-white">Nenhum conteudo lancado nos ultimos dias.</p>
+                    <p class="mt-1 text-sm text-mist">Quando houver envios, o grafico aparece aqui.</p>
                   </div>
                 </div>
               </AppCard>
@@ -448,7 +481,7 @@ function linePoints(series?: SeriesPoint[]) {
                 </label>
               </div>
               <div class="overflow-x-auto">
-                <table class="w-full min-w-[900px] text-left text-sm">
+                <table class="w-full min-w-[1020px] text-left text-sm">
                   <thead class="border-b border-white/10 bg-white/[0.035] text-xs uppercase tracking-[0.08em] text-mist">
                     <tr>
                       <th class="px-4 py-3">Usuario</th>
@@ -457,6 +490,7 @@ function linePoints(series?: SeriesPoint[]) {
                       <th class="px-4 py-3">Social</th>
                       <th class="px-4 py-3">Criado</th>
                       <th class="px-4 py-3">Atualizado</th>
+                      <th class="px-4 py-3 text-right">Acoes</th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-white/10">
@@ -479,6 +513,9 @@ function linePoints(series?: SeriesPoint[]) {
                       </td>
                       <td class="px-4 py-3 text-mist">{{ formatDate(user.createdAt) }}</td>
                       <td class="px-4 py-3 text-mist">{{ formatDate(user.updatedAt) }}</td>
+                      <td class="px-4 py-3 text-right">
+                        <AppActionMenu :items="userActionItems" title="Acoes do usuario" @select="handleUserAction(user, $event)" />
+                      </td>
                     </tr>
                   </tbody>
                 </table>
@@ -561,5 +598,14 @@ function linePoints(series?: SeriesPoint[]) {
       </div>
     </section>
     <ToastStack />
+    <ConfirmModal
+      :open="!!pendingDeleteUser"
+      title="Excluir usuario"
+      :message="`Excluir ${pendingDeleteUser?.name || 'este usuario'}? A conta sera removida e relacoes privadas serao apagadas. Esta acao nao pode ser desfeita.`"
+      confirm-label="Excluir usuario"
+      :loading="!!deletingUserId"
+      @close="pendingDeleteUser = null"
+      @confirm="deleteUser"
+    />
   </main>
 </template>

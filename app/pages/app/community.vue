@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BookOpen, Bot, ChevronDown, Heart, MessageCircle, PlusCircle, ScrollText } from 'lucide-vue-next'
+import { BookOpen, Bot, ChevronDown, Heart, MessageCircle, PlusCircle, ScrollText, Trash2 } from 'lucide-vue-next'
 
 definePageMeta({ layout: 'app', middleware: 'auth' })
 
@@ -26,6 +26,8 @@ const filter = ref<'ALL' | 'SYSTEM' | 'NPC' | 'CHARACTER'>(
 const search = ref('')
 const expanded = ref(new Set<string>())
 const addingId = ref('')
+const deletingId = ref('')
+const pendingDeletePost = ref<CommunityPost | null>(null)
 const { data, refresh } = await useFetch<{ posts: CommunityPost[] }>('/api/community', { default: () => ({ posts: [] }) })
 
 const visiblePosts = computed(() => {
@@ -55,6 +57,24 @@ function typeIcon(type: CommunityPost['type']) {
   return ({ SYSTEM: BookOpen, NPC: Bot, CHARACTER: ScrollText })[type]
 }
 
+function postActionItems(post: CommunityPost) {
+  return [
+    {
+      key: 'delete',
+      label: deletingId.value === post.id ? 'Apagando...' : 'Apagar publicacao',
+      icon: Trash2,
+      danger: true,
+      disabled: deletingId.value === post.id
+    }
+  ]
+}
+
+function handlePostAction(post: CommunityPost, action: string) {
+  if (action === 'delete') {
+    pendingDeletePost.value = post
+  }
+}
+
 async function like(id: string) {
   try {
     const response = await $fetch<{ liked: boolean }>(`/api/community/${id}/like`, { method: 'POST' })
@@ -77,6 +97,25 @@ async function clonePost(id: string, type: CommunityPost['type']) {
   }
 }
 
+async function deletePost() {
+  const post = pendingDeletePost.value
+  if (!post) return
+
+  deletingId.value = post.id
+  try {
+    await $fetch(`/api/community/${post.id}`, { method: 'DELETE' })
+    const next = new Set(expanded.value)
+    next.delete(post.id)
+    expanded.value = next
+    pendingDeletePost.value = null
+    push('Publicacao apagada.', 'success')
+    await refresh()
+  } catch (error) {
+    apiError(error, 'Nao foi possivel apagar a publicacao.')
+  } finally {
+    deletingId.value = ''
+  }
+}
 </script>
 
 <template>
@@ -102,9 +141,15 @@ async function clonePost(id: string, type: CommunityPost['type']) {
             <p class="mt-2 text-xs text-mist">{{ post.systemName || 'Generico' }} | por {{ post.author?.name || 'Usuario removido' }}</p>
           </button>
           <div class="flex flex-wrap items-start gap-2">
-            <AppButton variant="ghost" :loading="addingId === post.id" @click="clonePost(post.id, post.type)">
+            <AppButton v-if="post.author?.id !== auth.user?.id" variant="ghost" :loading="addingId === post.id" @click="clonePost(post.id, post.type)">
               <PlusCircle class="h-4 w-4" />Adicionar
             </AppButton>
+            <AppActionMenu
+              v-else
+              title="Acoes da publicacao"
+              :items="postActionItems(post)"
+              @select="handlePostAction(post, $event)"
+            />
             <button type="button" class="grid h-10 w-10 place-items-center rounded-lg border border-white/10 text-ember transition hover:bg-white/10" :title="isOpen(post.id) ? 'Minimizar' : 'Expandir'" @click="toggle(post.id)">
               <ChevronDown class="h-6 w-6 transition" :class="isOpen(post.id) ? 'rotate-180' : ''" />
             </button>
@@ -148,5 +193,14 @@ async function clonePost(id: string, type: CommunityPost['type']) {
 
       <EmptyState v-if="!visiblePosts.length" title="Nada publicado ainda" description="Quando a comunidade aprovar publicacoes, elas aparecem aqui." />
     </section>
+    <ConfirmModal
+      :open="!!pendingDeletePost"
+      title="Apagar publicacao"
+      :message="`Apagar ${pendingDeletePost?.title || 'esta publicacao'} da comunidade? Isso remove comentarios e curtidas desse post.`"
+      confirm-label="Apagar"
+      :loading="!!deletingId"
+      @close="pendingDeletePost = null"
+      @confirm="deletePost"
+    />
   </div>
 </template>
