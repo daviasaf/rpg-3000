@@ -34,6 +34,37 @@ export const resetPasswordSchema = z
   })
 
 const fieldType = z.enum(['TEXT', 'NUMBER', 'BOOLEAN', 'LIST', 'FORMULA', 'DICE'])
+const sheetTabType = z.enum([
+  'ATTRIBUTES',
+  'RESOURCES',
+  'SKILLS',
+  'CLASS_PROGRESS',
+  'ITEMS',
+  'WEAPONS',
+  'TRAITS',
+  'POWERS',
+  'TEXT_BLOCKS',
+  'CONDITIONS',
+  'RULES',
+  'ROLLS',
+  'CUSTOM'
+])
+const sheetFieldType = z.enum([
+  'SHORT_TEXT',
+  'LONG_TEXT',
+  'NUMBER',
+  'CHECKBOX',
+  'SELECT',
+  'LIST',
+  'DAMAGE',
+  'ROLL',
+  'COST',
+  'RANGE',
+  'BONUS',
+  'IMAGE',
+  'TAGS',
+  'EXTRA_PAIR'
+])
 const fieldCategory = z.enum([
   'ATTRIBUTE',
   'SKILL',
@@ -103,6 +134,60 @@ export const createSystemSchema = z.object({
         allowSkill: z.boolean().optional(),
         allowExtras: z.boolean().optional()
       })).max(12).optional(),
+      sheetTabs: z.array(z.object({
+        id: z.string().optional(),
+        name: z.string().trim().min(2).max(80),
+        key: z.string().trim().min(2).max(64).regex(/^[a-zA-Z0-9_/-]+$/, 'Use apenas letras, numeros, hifen, barra ou underline.'),
+        type: sheetTabType,
+        description: z.string().trim().max(600).optional(),
+        order: z.number().int().min(0).max(200).optional(),
+        enabled: z.boolean().optional(),
+        readonly: z.boolean().optional(),
+        playerEditable: z.boolean().optional(),
+        allowMultiple: z.boolean().optional(),
+        allowExtraFields: z.boolean().optional(),
+        allowRolls: z.boolean().optional(),
+        allowBonuses: z.boolean().optional(),
+        allowDamageCostAbility: z.boolean().optional(),
+        textMode: z.enum(['SINGLE', 'LIST']).optional(),
+        systemMarkdown: z.string().max(12000).optional(),
+        fields: z.array(z.object({
+          id: z.string().optional(),
+          label: z.string().trim().min(1).max(80),
+          key: z.string().trim().min(1).max(64).regex(/^[a-zA-Z0-9_/-]+$/, 'Use apenas letras, numeros, hifen, barra ou underline.'),
+          type: sheetFieldType,
+          required: z.boolean().optional(),
+          defaultValue: z.unknown().optional(),
+          options: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
+          placeholder: z.string().trim().max(120).optional(),
+          helpText: z.string().trim().max(240).optional(),
+          order: z.number().int().min(0).max(100).optional()
+        })).max(40).optional(),
+        records: z.array(z.object({
+          id: z.string().optional(),
+          name: z.string().trim().min(1).max(100),
+          description: z.string().trim().max(1200).optional(),
+          text: z.string().trim().max(4000).optional(),
+          value: z.union([z.number(), z.string()]).optional(),
+          min: z.number().nullable().optional(),
+          max: z.number().nullable().optional(),
+          relatedAttribute: z.string().trim().max(80).optional(),
+          damage: z.string().trim().max(80).optional(),
+          roll: z.string().trim().max(120).optional(),
+          cost: z.string().trim().max(80).optional(),
+          range: z.string().trim().max(80).optional(),
+          ability: z.string().trim().max(160).optional(),
+          bonus: z.string().trim().max(240).optional(),
+          effect: z.string().trim().max(1200).optional(),
+          quantity: z.number().nullable().optional(),
+          fields: z.record(z.unknown()).optional(),
+          extraFields: z.array(z.object({
+            id: z.string().optional(),
+            name: z.string().trim().max(80),
+            value: z.string().trim().max(240)
+          })).max(40).optional()
+        })).max(200).optional()
+      })).max(60).optional(),
       leveling: z.object({
         attributesPerLevel: z.number().int().min(0).max(100).default(1).optional(),
         levelOneAttributeLimit: z.number().int().min(1).max(100).default(5).optional(),
@@ -136,7 +221,7 @@ export const createSystemSchema = z.object({
       })).optional()
     })
     .default({}),
-  fields: z.array(systemFieldSchema).min(1, 'Crie pelo menos um campo para a ficha.')
+  fields: z.array(systemFieldSchema).default([])
 })
 
 export const updateSystemSchema = createSystemSchema.partial().extend({

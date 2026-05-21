@@ -1,4 +1,34 @@
 export type FieldType = 'TEXT' | 'NUMBER' | 'BOOLEAN' | 'LIST' | 'FORMULA' | 'DICE'
+export type SheetTabType =
+  | 'ATTRIBUTES'
+  | 'RESOURCES'
+  | 'SKILLS'
+  | 'CLASS_PROGRESS'
+  | 'ITEMS'
+  | 'WEAPONS'
+  | 'TRAITS'
+  | 'POWERS'
+  | 'TEXT_BLOCKS'
+  | 'CONDITIONS'
+  | 'RULES'
+  | 'ROLLS'
+  | 'CUSTOM'
+
+export type SheetFieldType =
+  | 'SHORT_TEXT'
+  | 'LONG_TEXT'
+  | 'NUMBER'
+  | 'CHECKBOX'
+  | 'SELECT'
+  | 'LIST'
+  | 'DAMAGE'
+  | 'ROLL'
+  | 'COST'
+  | 'RANGE'
+  | 'BONUS'
+  | 'IMAGE'
+  | 'TAGS'
+  | 'EXTRA_PAIR'
 
 export type FieldCategory =
   | 'ATTRIBUTE'
@@ -22,6 +52,61 @@ export interface DynamicField {
   optionsJson?: unknown
   formula?: string | null
   order?: number
+}
+
+export interface SheetTabField {
+  id?: string
+  label: string
+  key: string
+  type: SheetFieldType
+  required?: boolean
+  defaultValue?: unknown
+  options?: string[]
+  placeholder?: string
+  helpText?: string
+  order?: number
+}
+
+export interface SheetTabRecord {
+  id?: string
+  name: string
+  description?: string
+  text?: string
+  value?: number | string
+  min?: number | null
+  max?: number | null
+  relatedAttribute?: string
+  damage?: string
+  roll?: string
+  cost?: string
+  range?: string
+  ability?: string
+  bonus?: string
+  effect?: string
+  quantity?: number | null
+  fields?: Record<string, unknown>
+  extraFields?: Array<{ id?: string; name: string; value: string }>
+}
+
+export interface SheetTab {
+  id?: string
+  name: string
+  key: string
+  type: SheetTabType
+  description?: string
+  order?: number
+  enabled?: boolean
+  readonly?: boolean
+  playerEditable?: boolean
+  allowMultiple?: boolean
+  allowExtraFields?: boolean
+  allowRolls?: boolean
+  allowBonuses?: boolean
+  allowDamageCostAbility?: boolean
+  textMode?: 'SINGLE' | 'LIST'
+  fields?: SheetTabField[]
+  records?: SheetTabRecord[]
+  systemMarkdown?: string
 }
 
 export interface SystemSchema {
@@ -56,6 +141,7 @@ export interface SystemSchema {
     allowSkill?: boolean
     allowExtras?: boolean
   }>
+  sheetTabs?: SheetTab[]
   leveling?: {
     attributesPerLevel?: number
     levelOneAttributeLimit?: number

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DynamicField, SystemSchema } from '../../../../../shared/types/system'
+import { fieldsFromSheetTabs, normalizeSheetTabs } from '~~/shared/utils/sheetTabs'
 
 definePageMeta({ layout: 'app', middleware: 'auth' })
 
@@ -31,11 +32,12 @@ const schema = ref<SystemSchema>({
   primaryResource: data.value?.system.schemaJson?.primaryResource || 'vida',
   defaultRoll: data.value?.system.schemaJson?.defaultRoll || '1d20 + atributo',
   notes: data.value?.system.schemaJson?.notes || '',
-  categories: data.value?.system.schemaJson?.categories || ['Atributos', 'Recursos', 'Pericias', 'Classes'],
+  categories: data.value?.system.schemaJson?.categories || [],
   rulesMarkdown: data.value?.system.schemaJson?.rulesMarkdown || '',
-  sheetSections: data.value?.system.schemaJson?.sheetSections || defaultSheetSections(),
+  sheetTabs: data.value?.system.schemaJson?.sheetTabs || [],
+  sheetSections: data.value?.system.schemaJson?.sheetSections || [],
   sheetTexts: data.value?.system.schemaJson?.sheetTexts || [],
-  sheetLists: data.value?.system.schemaJson?.sheetLists?.length ? data.value.system.schemaJson.sheetLists : defaultSheetLists(),
+  sheetLists: data.value?.system.schemaJson?.sheetLists || [],
   leveling: {
     levelOneAttributePoints: data.value?.system.schemaJson?.leveling?.levelOneAttributePoints ?? 6,
     attributesPerLevel: data.value?.system.schemaJson?.leveling?.attributesPerLevel ?? 1,
@@ -58,7 +60,8 @@ async function submit() {
 
   loading.value = true
   try {
-    const normalizedFields = fields.value.map(normalizeField)
+    const normalizedSchema = normalizeSchema(schema.value, fields.value)
+    const normalizedFields = fieldsFromSheetTabs(normalizedSchema.sheetTabs || [], fields.value).map(normalizeField)
     await $fetch(`/api/systems/${route.params.id}`, {
       method: 'PUT',
       body: {
@@ -67,7 +70,7 @@ async function submit() {
         avatarUrl: basic.avatarUrl,
         tags: basic.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
         visibility: basic.visibility,
-        schemaJson: normalizeSchema(schema.value, normalizedFields),
+        schemaJson: normalizedSchema,
         fields: normalizedFields
       }
     })
@@ -97,7 +100,6 @@ function validateDraft() {
   const errors: string[] = []
   if (basic.name.trim().length < 2) errors.push('Informe o nome do sistema.')
   if (basic.description.trim().length < 8) errors.push('Escreva uma descricao com pelo menos 8 caracteres.')
-  if (fields.value.length === 0) errors.push('Crie pelo menos um campo para a ficha.')
 
   const seenKeys = new Set<string>()
   ;(schema.value.sheetTexts || []).forEach((item, index) => {
@@ -124,6 +126,24 @@ function validateDraft() {
     if (!key || key.length < 2) errors.push(`${label}: informe uma chave tecnica com pelo menos 2 caracteres.`)
     if (listKeys.has(key)) errors.push(`${label}: a chave da lista esta repetida.`)
     listKeys.add(key)
+  })
+
+  const tabKeys = new Set<string>()
+  ;(schema.value.sheetTabs || []).forEach((tab, index) => {
+    const label = tab.name?.trim() || `Aba ${index + 1}`
+    const key = keyFromLabel(tab.key || tab.name || '')
+    if (!tab.name?.trim()) errors.push(`${label}: informe o nome da aba.`)
+    if (!key || key.length < 2) errors.push(`${label}: a chave interna nao foi gerada corretamente.`)
+    if (tabKeys.has(key)) errors.push(`${label}: existe outra aba com a mesma chave interna.`)
+    tabKeys.add(key)
+
+    const fieldKeys = new Set<string>()
+    ;(tab.fields || []).forEach((field) => {
+      const fieldKey = keyFromLabel(field.key || field.label || '')
+      if (!field.label?.trim()) errors.push(`${label}: existe um campo sem nome.`)
+      if (fieldKeys.has(fieldKey)) errors.push(`${label}: o campo "${field.label}" esta repetido.`)
+      fieldKeys.add(fieldKey)
+    })
   })
 
   fields.value.forEach((field, index) => {
@@ -162,14 +182,22 @@ function normalizeOptions(options: unknown) {
   return []
 }
 
-function normalizeSchema(currentSchema: SystemSchema, normalizedFields: DynamicField[]) {
+function normalizeSchema(currentSchema: SystemSchema, currentFields: DynamicField[]) {
+  const normalizedTabs = normalizeSheetTabs(currentSchema)
+  const normalizedFields = fieldsFromSheetTabs(normalizedTabs, currentFields)
   const targetLabels = new Map(normalizedFields.map((field) => [field.key, field.label]))
+  const rulesMarkdown = normalizedTabs
+    .filter((tab) => tab.type === 'RULES')
+    .map((tab) => tab.systemMarkdown?.trim())
+    .filter(Boolean)
+    .join('\n\n')
 
   return {
     ...currentSchema,
     primaryResource: keyFromLabel(currentSchema.primaryResource || 'vida'),
-    rulesMarkdown: currentSchema.rulesMarkdown?.trim() || '',
-    sheetSections: (currentSchema.sheetSections || defaultSheetSections())
+    rulesMarkdown,
+    sheetTabs: normalizedTabs,
+    sheetSections: (currentSchema.sheetSections || [])
       .map((item, index) => ({
         id: item.id || `section_${index + 1}`,
         key: keyFromLabel(item.key || item.title),
@@ -229,23 +257,11 @@ function normalizeSchema(currentSchema: SystemSchema, normalizedFields: DynamicF
 }
 
 function defaultSheetSections(): NonNullable<SystemSchema['sheetSections']> {
-  return [
-    { id: 'section_items', key: 'items', title: 'Itens', enabled: true, multiple: true },
-    { id: 'section_weapons', key: 'weapons', title: 'Armas', enabled: true, multiple: true, allowDamage: true, allowSkill: true },
-    { id: 'section_traits', key: 'traits', title: 'Tracos / Talentos', enabled: true, multiple: true },
-    { id: 'section_powers', key: 'powers', title: 'Poderes', enabled: true, multiple: true, allowDamage: true },
-    { id: 'section_biography', key: 'biography', title: 'Biografia', enabled: true, multiple: false, longText: true },
-    { id: 'section_appearance', key: 'appearance', title: 'Aparencia', enabled: true, multiple: false, longText: true },
-    { id: 'section_personality', key: 'personality', title: 'Alinhamento / Personalidade', enabled: true, multiple: false, longText: true },
-    { id: 'section_conditions', key: 'conditions', title: 'Condicoes', enabled: true, multiple: true }
-  ]
+  return []
 }
 
 function defaultSheetLists(): NonNullable<SystemSchema['sheetLists']> {
-  return [
-    { id: 'sheet_list_equipment', key: 'equipment', name: 'Lista de equipamentos', description: 'Equipamentos, ferramentas, armaduras e itens carregados pelo personagem.', enabled: true, allowDamage: true, allowExtras: true },
-    { id: 'sheet_list_spells', key: 'spells', name: 'Lista de magias', description: 'Magias, tecnicas ou efeitos sobrenaturais.', enabled: true, allowDamage: true, allowSkill: true, allowExtras: true }
-  ]
+  return []
 }
 
 function keyFromLabel(label: string) {

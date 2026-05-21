@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { DynamicField, SystemSchema } from '../../../../shared/types/system'
+import { normalizeSheetTabs, sheetTabTypeLabels } from '~~/shared/utils/sheetTabs'
 import { applyClassProgression } from '../../../utils/characterProgression'
 
 definePageMeta({ layout: 'app', middleware: 'auth' })
@@ -17,6 +18,7 @@ const formErrors = ref<string[]>([])
 
 const selectedSystem = computed(() => systems.value?.systems.find((system) => system.id === selectedSystemId.value))
 const systemClasses = computed(() => selectedSystem.value?.schemaJson?.classes || [])
+const systemTabs = computed(() => normalizeSheetTabs(selectedSystem.value?.schemaJson).filter((tab) => tab.enabled !== false))
 const selectedClass = computed(() => systemClasses.value.find((item) => item.key === progression.classKey))
 const attributeFields = computed(() => selectedSystem.value?.fields.filter((field) => field.category === 'ATTRIBUTE') || [])
 const editableFields = computed(() => selectedSystem.value?.fields.filter((field) => field.category !== 'ATTRIBUTE') || [])
@@ -43,6 +45,14 @@ watch(selectedSystem, (system) => {
   if (!system) return
   for (const field of system.fields) {
     if (!(field.key in dataJson)) dataJson[field.key] = field.category === 'ATTRIBUTE' ? Number(field.defaultValue ?? 0) : field.defaultValue ?? ''
+  }
+  for (const tab of normalizeSheetTabs(system.schemaJson).filter((item) => item.enabled !== false)) {
+    if (tab.key in dataJson) continue
+    if (['ITEMS', 'WEAPONS', 'TRAITS', 'POWERS', 'CONDITIONS', 'CUSTOM'].includes(tab.type)) {
+      dataJson[tab.key] = []
+    } else if (tab.type !== 'RULES' && tab.type !== 'CLASS_PROGRESS') {
+      dataJson[tab.key] = {}
+    }
   }
   for (const field of system.fields.filter((item) => item.category === 'ATTRIBUTE')) {
     dataJson[field.key] = Number(dataJson[field.key] || 0)
@@ -229,6 +239,12 @@ function validateCharacterDraft() {
       </AppCard>
       <AppCard v-if="selectedSystem">
         <h2 class="mb-4 text-xl font-black text-white">Campos da ficha</h2>
+        <div v-if="systemTabs.length" class="mb-4 grid gap-3 md:grid-cols-2">
+          <div v-for="tab in systemTabs" :key="tab.id || tab.key" class="rounded-lg border border-white/10 bg-white/[0.04] p-3">
+            <p class="font-black text-white">{{ tab.name }}</p>
+            <p class="mt-1 text-xs text-mist">{{ sheetTabTypeLabels[tab.type] }} | {{ tab.records?.length || (tab.type === 'RULES' ? 1 : 0) }} registros</p>
+          </div>
+        </div>
         <div class="grid gap-4 md:grid-cols-2">
           <div v-for="field in editableFields" :key="field.key">
             <DynamicFieldRenderer v-model="dataJson[field.key]" :field="field" />

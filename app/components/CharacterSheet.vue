@@ -1,11 +1,33 @@
 <script setup lang="ts">
 import { ChevronDown, Info, Plus, Trash2 } from 'lucide-vue-next'
-import type { DynamicField, SystemSchema } from '../../shared/types/system'
+import type { DynamicField, SheetTab, SheetTabRecord, SystemSchema } from '../../shared/types/system'
+import { keyFromLabel, normalizeSheetTabs, sheetTabTypeLabels } from '~~/shared/utils/sheetTabs'
 import { classNotes, fieldSources } from '../utils/characterProgression'
 
 type ExtraField = { id: string; name: string; value: string }
 type SheetListItem = { id: string; name: string; description: string; damage?: string; skill?: string; extras?: ExtraField[] }
 type SheetTextBlock = { name: string; description: string }
+type TabItem = SheetListItem & {
+  roll?: string
+  cost?: string
+  range?: string
+  ability?: string
+  bonus?: string
+  effect?: string
+  quantity?: number | null
+  fields: Record<string, unknown>
+}
+type TabRecordValue = {
+  name?: string
+  value?: unknown
+  current?: unknown
+  max?: unknown
+  text?: string
+  description?: string
+  relatedAttribute?: string
+  roll?: string
+  fields?: Record<string, unknown>
+}
 
 const props = defineProps<{
   character: {
@@ -44,22 +66,15 @@ const className = computed(() => {
   return props.character.system.schemaJson?.classes?.find((item) => item.key === classKey)?.name || classKey
 })
 const isRejected = computed(() => props.character.moderationStatus === 'REJECTED')
-const sheetLists = computed(() => (props.character.system.schemaJson?.sheetLists || []).filter((list) => list.enabled !== false))
+const sheetTabs = computed(() => normalizeSheetTabs(props.character.system.schemaJson).filter((tab) => tab.enabled !== false))
+const tabFieldKeys = computed(() => new Set(sheetTabs.value.flatMap((tab) => (tab.records || []).map((record) => keyFromLabel(`${tab.key}_${record.name}`)))))
+const sheetLists = computed(() => sheetTabs.value.length ? [] : (props.character.system.schemaJson?.sheetLists || []).filter((list) => list.enabled !== false))
 const visibleClassNotes = computed(() => classNotes(props.character.system.schemaJson, draft))
 const selectedFieldSources = computed(() => sourceField.value ? fieldSources(sourceField.value, props.character.system.schemaJson, draft) : [])
-const defaultBuiltInSections = [
-  { key: 'items', title: 'Itens', multiple: true, damage: false, skill: false, extras: false },
-  { key: 'weapons', title: 'Armas', multiple: true, damage: true, skill: true, extras: false },
-  { key: 'traits', title: 'Tracos / Talentos', multiple: true, damage: false, skill: false, extras: false },
-  { key: 'powers', title: 'Poderes', multiple: true, damage: true, skill: false, extras: false },
-  { key: 'biography', title: 'Biografia', multiple: false, damage: false, skill: false, extras: false },
-  { key: 'appearance', title: 'Aparencia', multiple: false, damage: false, skill: false, extras: false },
-  { key: 'personality', title: 'Alinhamento / Personalidade', multiple: false, damage: false, skill: false, extras: false },
-  { key: 'conditions', title: 'Condicoes', multiple: true, damage: false, skill: false, extras: false }
-]
 const builtInSections = computed(() => {
+  if (sheetTabs.value.length) return []
   const configured = props.character.system.schemaJson?.sheetSections
-  if (!configured?.length) return defaultBuiltInSections
+  if (!configured?.length) return []
 
   return configured
     .filter((section) => section.enabled !== false)
@@ -72,14 +87,14 @@ const builtInSections = computed(() => {
       extras: Boolean(section.allowExtras)
     }))
 })
-const rulesMarkdown = computed(() => props.character.system.schemaJson?.rulesMarkdown || '')
+const rulesMarkdown = computed(() => sheetTabs.value.some((tab) => tab.type === 'RULES') ? '' : props.character.system.schemaJson?.rulesMarkdown || '')
 
 const groups = computed(() => {
   const order = ['ATTRIBUTE', 'RESOURCE', 'SKILL', 'TEXT_FIELD', 'NUMERIC_FIELD', 'BOOLEAN_FIELD', 'LIST_FIELD', 'FORMULA', 'ROLL_RULE', 'STATUS_BAR']
   return order
     .map((category) => ({
       category,
-      fields: props.character.system.fields.filter((field) => field.category === category)
+      fields: props.character.system.fields.filter((field) => field.category === category && !tabFieldKeys.value.has(field.key))
     }))
     .filter((group) => group.fields.length > 0)
 })
@@ -118,6 +133,99 @@ function uid(prefix: string) {
 function listItems(key: string): SheetListItem[] {
   if (!Array.isArray(draft[key])) draft[key] = []
   return draft[key] as SheetListItem[]
+}
+
+function tabRecordKey(record: SheetTabRecord, index: number) {
+  return record.id || keyFromLabel(record.name || `registro_${index + 1}`)
+}
+
+function tabRecordValues(tab: SheetTab): Record<string, TabRecordValue> {
+  if (!draft[tab.key] || typeof draft[tab.key] !== 'object' || Array.isArray(draft[tab.key])) draft[tab.key] = {}
+  const values = draft[tab.key] as Record<string, TabRecordValue>
+  ;(tab.records || []).forEach((record, index) => {
+    const key = tabRecordKey(record, index)
+    if (!values[key]) values[key] = defaultRecordValue(tab, record)
+  })
+  return values
+}
+
+function tabRecordValue(tab: SheetTab, record: SheetTabRecord, index: number) {
+  return tabRecordValues(tab)[tabRecordKey(record, index)] || defaultRecordValue(tab, record)
+}
+
+function setTabRecordValue(tab: SheetTab, record: SheetTabRecord, index: number, key: keyof TabRecordValue, value: unknown) {
+  const values = tabRecordValues(tab)
+  const recordKey = tabRecordKey(record, index)
+  values[recordKey] ||= defaultRecordValue(tab, record)
+  values[recordKey][key] = value as never
+}
+
+function defaultRecordValue(tab: SheetTab, record: SheetTabRecord): TabRecordValue {
+  if (tab.type === 'RESOURCES') {
+    return { name: record.name, current: record.value ?? 0, max: record.max ?? '', description: record.description || '' }
+  }
+  if (tab.type === 'TEXT_BLOCKS') {
+    return { name: record.name, text: record.text || record.description || '' }
+  }
+  if (tab.type === 'ROLLS') {
+    return { name: record.name, roll: record.roll || '', description: record.description || '' }
+  }
+  return { name: record.name, value: record.value ?? '', description: record.description || '', relatedAttribute: record.relatedAttribute || '' }
+}
+
+function tabItems(tab: SheetTab): TabItem[] {
+  if (!Array.isArray(draft[tab.key])) {
+    draft[tab.key] = (tab.records || []).map((record) => defaultTabItem(tab, record))
+  }
+  ;(draft[tab.key] as TabItem[]).forEach((item) => {
+    item.fields ||= {}
+    item.extras ||= []
+  })
+  return draft[tab.key] as TabItem[]
+}
+
+function defaultTabItem(tab: SheetTab, record?: SheetTabRecord): TabItem {
+  return {
+    id: uid(tab.key),
+    name: record?.name || '',
+    description: record?.description || record?.text || '',
+    damage: record?.damage || '',
+    skill: record?.ability || '',
+    roll: record?.roll || '',
+    cost: record?.cost || '',
+    range: record?.range || '',
+    ability: record?.ability || '',
+    bonus: record?.bonus || '',
+    effect: record?.effect || '',
+    quantity: record?.quantity ?? null,
+    extras: (record?.extraFields || []).map((extra) => ({ id: extra.id || uid('extra'), name: extra.name, value: extra.value })),
+    fields: { ...(record?.fields || {}) }
+  }
+}
+
+function addTabItem(tab: SheetTab) {
+  tabItems(tab).push(defaultTabItem(tab))
+}
+
+function removeTabItem(tab: SheetTab, index: number) {
+  tabItems(tab).splice(index, 1)
+}
+
+function addButtonLabel(tab: SheetTab) {
+  const labels: Partial<Record<string, string>> = {
+    ITEMS: 'item',
+    WEAPONS: 'arma',
+    TRAITS: 'traco',
+    POWERS: 'poder',
+    TEXT_BLOCKS: 'bloco',
+    CONDITIONS: 'condicao',
+    CUSTOM: tab.name.toLowerCase()
+  }
+  return `Adicionar ${labels[tab.type] || 'registro'}`
+}
+
+function tabReadonly(tab: SheetTab) {
+  return !props.editable || tab.readonly || tab.playerEditable === false
 }
 
 function singleBlock(key: string): SheetTextBlock {
@@ -260,6 +368,133 @@ onBeforeUnmount(() => {
           <p v-for="item in visibleClassNotes" :key="`${item.level}-${item.note}`" class="rounded-lg border border-white/10 bg-white/[0.04] p-3 text-sm leading-6 text-mist">
             <b class="text-ember">{{ item.title }} nivel {{ item.level }}:</b> {{ item.note }}
           </p>
+        </div>
+      </AppCard>
+
+      <AppCard v-for="tab in sheetTabs" :key="tab.id || tab.key">
+        <button type="button" class="flex w-full items-center justify-between gap-3 text-left" @click="toggleGroup(`tab:${tab.key}`)">
+          <span>
+            <h2 class="text-lg font-black text-white">{{ tab.name }}</h2>
+            <p class="mt-1 text-sm text-mist">{{ tab.description || sheetTabTypeLabels[tab.type] }}</p>
+          </span>
+          <ChevronDown class="h-5 w-5 text-ember transition" :class="isGroupOpen(`tab:${tab.key}`) ? 'rotate-180' : ''" />
+        </button>
+
+        <div v-if="isGroupOpen(`tab:${tab.key}`)" class="mt-4">
+          <div v-if="tab.type === 'RULES'" class="rounded-lg border border-white/10 bg-white/[0.04] p-4 text-sm leading-6 text-mist">
+            <div class="markdown-preview" v-html="renderMarkdown(tab.systemMarkdown || '')" />
+          </div>
+
+          <div v-else-if="['ATTRIBUTES', 'SKILLS', 'ROLLS', 'TEXT_BLOCKS'].includes(tab.type)" class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div v-for="(record, recordIndex) in tab.records || []" :key="record.id || recordIndex" class="rounded-lg border border-white/10 bg-white/[0.04] p-3" :class="['TEXT_BLOCKS', 'ROLLS'].includes(tab.type) ? 'md:col-span-2 xl:col-span-3' : ''">
+              <h3 class="font-black text-white">{{ record.name }}</h3>
+              <p v-if="record.description" class="mt-1 text-sm text-mist">{{ record.description }}</p>
+              <div class="mt-3 grid gap-3 md:grid-cols-2">
+                <label v-if="['ATTRIBUTES', 'SKILLS'].includes(tab.type)">
+                  <span class="label">Valor</span>
+                  <input :value="tabRecordValue(tab, record, recordIndex).value as string | number" type="number" class="input" :readonly="tabReadonly(tab)" @input="setTabRecordValue(tab, record, recordIndex, 'value', Number(($event.target as HTMLInputElement).value))">
+                </label>
+                <label v-if="tab.type === 'SKILLS'">
+                  <span class="label">Atributo relacionado</span>
+                  <input :value="String(tabRecordValue(tab, record, recordIndex).relatedAttribute || '')" class="input" :readonly="tabReadonly(tab)" @input="setTabRecordValue(tab, record, recordIndex, 'relatedAttribute', ($event.target as HTMLInputElement).value)">
+                </label>
+                <label v-if="tab.type === 'ROLLS'" class="md:col-span-2">
+                  <span class="label">Formula</span>
+                  <input :value="String(tabRecordValue(tab, record, recordIndex).roll || '')" class="input" :readonly="tabReadonly(tab)" placeholder="1d20 + atributo" @input="setTabRecordValue(tab, record, recordIndex, 'roll', ($event.target as HTMLInputElement).value)">
+                </label>
+                <label v-if="tab.type === 'TEXT_BLOCKS'" class="md:col-span-2">
+                  <span class="label">Texto</span>
+                  <textarea :value="String(tabRecordValue(tab, record, recordIndex).text || '')" rows="5" class="input" :readonly="tabReadonly(tab)" @input="setTabRecordValue(tab, record, recordIndex, 'text', ($event.target as HTMLTextAreaElement).value)" />
+                </label>
+              </div>
+            </div>
+            <p v-if="!(tab.records || []).length" class="rounded-lg border border-dashed border-white/15 p-4 text-sm text-mist md:col-span-2 xl:col-span-3">Nenhum registro definido nesta aba.</p>
+          </div>
+
+          <div v-else-if="tab.type === 'RESOURCES'" class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div v-for="(record, recordIndex) in tab.records || []" :key="record.id || recordIndex" class="rounded-lg border border-white/10 bg-white/[0.04] p-3">
+              <h3 class="font-black text-white">{{ record.name }}</h3>
+              <div class="mt-3 grid grid-cols-2 gap-2">
+                <label>
+                  <span class="label">Atual</span>
+                  <input :value="tabRecordValue(tab, record, recordIndex).current as string | number" type="number" class="input" :readonly="tabReadonly(tab)" @input="setTabRecordValue(tab, record, recordIndex, 'current', Number(($event.target as HTMLInputElement).value))">
+                </label>
+                <label>
+                  <span class="label">Maximo</span>
+                  <input :value="tabRecordValue(tab, record, recordIndex).max as string | number" type="number" class="input" :readonly="tabReadonly(tab)" @input="setTabRecordValue(tab, record, recordIndex, 'max', Number(($event.target as HTMLInputElement).value))">
+                </label>
+              </div>
+              <p v-if="record.description" class="mt-2 text-sm text-mist">{{ record.description }}</p>
+            </div>
+          </div>
+
+          <div v-else-if="tab.type === 'CLASS_PROGRESS'" class="space-y-3">
+            <p v-if="className" class="rounded-lg border border-white/10 bg-white/[0.04] p-3 text-sm text-mist">Classe atual: <b class="text-white">{{ className }}</b></p>
+            <p v-if="!className" class="rounded-lg border border-dashed border-white/15 p-4 text-sm text-mist">Classe ainda nao escolhida para este personagem.</p>
+          </div>
+
+          <div v-else class="space-y-3">
+            <div v-for="(item, index) in tabItems(tab)" :key="item.id || index" class="rounded-lg border border-white/10 bg-white/[0.04] p-3">
+              <div class="grid gap-3 md:grid-cols-[1fr_150px_150px_auto]">
+                <label>
+                  <span class="label">Nome</span>
+                  <input v-model="item.name" class="input" :readonly="tabReadonly(tab)" placeholder="Nome">
+                </label>
+                <label v-if="tab.allowDamageCostAbility">
+                  <span class="label">Dano</span>
+                  <input v-model="item.damage" class="input" :readonly="tabReadonly(tab)" placeholder="1d8">
+                </label>
+                <label v-if="tab.allowRolls">
+                  <span class="label">Rolagem</span>
+                  <input v-model="item.roll" class="input" :readonly="tabReadonly(tab)" placeholder="1d20 + atributo">
+                </label>
+                <button v-if="!tabReadonly(tab)" type="button" class="self-end rounded-lg border border-flare/30 p-3 text-flare hover:bg-flare/10" title="Remover" @click="removeTabItem(tab, index)">
+                  <Trash2 class="h-4 w-4" />
+                </button>
+                <label v-if="tab.allowDamageCostAbility && tab.type === 'POWERS'">
+                  <span class="label">Custo</span>
+                  <input v-model="item.cost" class="input" :readonly="tabReadonly(tab)" placeholder="2 PE">
+                </label>
+                <label v-if="tab.allowDamageCostAbility && tab.type === 'POWERS'">
+                  <span class="label">Alcance</span>
+                  <input v-model="item.range" class="input" :readonly="tabReadonly(tab)" placeholder="Curto">
+                </label>
+                <label v-if="tab.allowDamageCostAbility && ['WEAPONS', 'ITEMS'].includes(tab.type)">
+                  <span class="label">Habilidade</span>
+                  <input v-model="item.ability" class="input" :readonly="tabReadonly(tab)" placeholder="Opcional">
+                </label>
+                <label v-if="tab.allowBonuses">
+                  <span class="label">Bonus / aumento</span>
+                  <input v-model="item.bonus" class="input" :readonly="tabReadonly(tab)" placeholder="+1 Potencia">
+                </label>
+                <label v-if="tab.type === 'ITEMS'">
+                  <span class="label">Quantidade</span>
+                  <input v-model.number="item.quantity" type="number" class="input" :readonly="tabReadonly(tab)">
+                </label>
+                <label class="md:col-span-4">
+                  <span class="label">Texto / descricao</span>
+                  <textarea v-model="item.description" rows="3" class="input" :readonly="tabReadonly(tab)" />
+                </label>
+              </div>
+
+              <div v-if="tab.type === 'CUSTOM' && tab.fields?.length" class="mt-3 grid gap-3 md:grid-cols-2">
+                <label v-for="field in tab.fields" :key="field.id || field.key" :class="field.type === 'LONG_TEXT' ? 'md:col-span-2' : ''">
+                  <span class="label">{{ field.label }}</span>
+                  <textarea v-if="field.type === 'LONG_TEXT'" :value="String(item.fields[field.key] || '')" rows="3" class="input" :readonly="tabReadonly(tab)" @input="item.fields[field.key] = ($event.target as HTMLTextAreaElement).value" />
+                  <input v-else-if="field.type === 'NUMBER'" :value="item.fields[field.key] as string | number" type="number" class="input" :readonly="tabReadonly(tab)" @input="item.fields[field.key] = Number(($event.target as HTMLInputElement).value)">
+                  <select v-else-if="field.type === 'SELECT'" v-model="item.fields[field.key]" class="select" :disabled="tabReadonly(tab)">
+                    <option v-for="option in field.options || []" :key="option" :value="option">{{ option }}</option>
+                  </select>
+                  <input v-else :value="String(item.fields[field.key] || '')" class="input" :readonly="tabReadonly(tab)" @input="item.fields[field.key] = ($event.target as HTMLInputElement).value">
+                </label>
+              </div>
+            </div>
+
+            <button v-if="!tabReadonly(tab)" type="button" class="inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/10 px-3 text-sm font-bold text-white hover:border-ember/40" @click="addTabItem(tab)">
+              <Plus class="h-4 w-4" />{{ addButtonLabel(tab) }}
+            </button>
+            <p v-if="!tabItems(tab).length" class="rounded-lg border border-dashed border-white/15 p-4 text-sm text-mist">Nenhum registro nesta aba.</p>
+          </div>
         </div>
       </AppCard>
 

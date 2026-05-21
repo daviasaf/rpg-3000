@@ -1,43 +1,25 @@
 <script setup lang="ts">
-import { FileText, Plus, SlidersHorizontal, Trash2 } from 'lucide-vue-next'
-import type { DynamicField, FieldCategory, FieldType, SystemClass, SystemClassLevel, SystemClassLevelChange, SystemSchema } from '../../shared/types/system'
+import { Copy, Eye, EyeOff, FileText, GripVertical, Plus, SlidersHorizontal, Trash2, X } from 'lucide-vue-next'
+import type { DynamicField, SheetFieldType, SheetTab, SheetTabField, SheetTabRecord, SheetTabType, SystemClass, SystemClassLevel, SystemClassLevelChange, SystemSchema } from '../../shared/types/system'
+import { createSheetTab, fieldsFromSheetTabs, keyFromLabel, normalizeSheetTabs, sheetFieldTypeLabels, sheetTabTypeLabels, uid } from '~~/shared/utils/sheetTabs'
 
 const fields = defineModel<DynamicField[]>('fields', { required: true })
 const schema = defineModel<SystemSchema>('schema', { required: true })
 
-const builtInSectionDefinitions = [
-  { key: 'items', title: 'Itens', multiple: true, longText: false, allowDamage: false, allowSkill: false, allowExtras: false },
-  { key: 'weapons', title: 'Armas', multiple: true, longText: false, allowDamage: true, allowSkill: true, allowExtras: false },
-  { key: 'traits', title: 'Tracos / Talentos', multiple: true, longText: false, allowDamage: false, allowSkill: false, allowExtras: false },
-  { key: 'powers', title: 'Poderes', multiple: true, longText: false, allowDamage: true, allowSkill: false, allowExtras: false },
-  { key: 'biography', title: 'Biografia', multiple: false, longText: true, allowDamage: false, allowSkill: false, allowExtras: false },
-  { key: 'appearance', title: 'Aparencia', multiple: false, longText: true, allowDamage: false, allowSkill: false, allowExtras: false },
-  { key: 'personality', title: 'Alinhamento / Personalidade', multiple: false, longText: true, allowDamage: false, allowSkill: false, allowExtras: false },
-  { key: 'conditions', title: 'Condicoes', multiple: true, longText: false, allowDamage: false, allowSkill: false, allowExtras: false }
-]
+const tabs = computed({
+  get: () => schema.value.sheetTabs || [],
+  set: (next: SheetTab[]) => {
+    schema.value.sheetTabs = next.map((tab, index) => ({ ...tab, order: index }))
+    fields.value = fieldsFromSheetTabs(schema.value.sheetTabs, fields.value)
+  }
+})
 
-const specialListDefinitions = [
-  { key: 'equipment', name: 'Lista de equipamentos', description: 'Equipamentos, ferramentas, armaduras e itens carregados pelo personagem.', enabled: true, allowDamage: true, allowSkill: false, allowExtras: true },
-  { key: 'spells', name: 'Lista de magias', description: 'Magias, tecnicas ou efeitos sobrenaturais com custo, alcance e campos extras.', enabled: true, allowDamage: true, allowSkill: true, allowExtras: true }
-]
-
-const sectionSteps = builtInSectionDefinitions.map((section) => section.title)
-const steps = ['Informacoes', 'Regras de nivel', 'Atributos', 'Recursos', 'Pericias', 'Classes', ...sectionSteps, 'Regras gerais', 'Lista de equipamentos', 'Lista de magias', 'Lista personalizada', 'Rolagens', 'Preview', 'Publicar']
-const current = ref(0)
-
-const categories: Record<string, FieldCategory> = {
-  Atributos: 'ATTRIBUTE',
-  Recursos: 'RESOURCE',
-  Pericias: 'SKILL',
-  Rolagens: 'ROLL_RULE'
-}
-
-const currentStep = computed(() => steps[current.value] || 'Informacoes')
-const currentCategory = computed(() => categories[currentStep.value])
-const currentBuiltInDefinition = computed(() => builtInSectionDefinitions.find((section) => section.title === currentStep.value))
-const currentBuiltInSection = computed(() => currentBuiltInDefinition.value ? schema.value.sheetSections?.find((section) => section.key === currentBuiltInDefinition.value?.key) : undefined)
-const classTargets = computed(() => fields.value.filter((field) => field.type === 'NUMBER' && ['ATTRIBUTE', 'SKILL', 'RESOURCE', 'STATUS_BAR', 'NUMERIC_FIELD'].includes(field.category)))
-const classes = computed(() => schema.value.classes || [])
+const tabTypes: SheetTabType[] = ['ATTRIBUTES', 'RESOURCES', 'SKILLS', 'CLASS_PROGRESS', 'ITEMS', 'WEAPONS', 'TRAITS', 'POWERS', 'TEXT_BLOCKS', 'CONDITIONS', 'RULES', 'ROLLS', 'CUSTOM']
+const fieldTypes: SheetFieldType[] = ['SHORT_TEXT', 'LONG_TEXT', 'NUMBER', 'CHECKBOX', 'SELECT', 'LIST', 'DAMAGE', 'ROLL', 'COST', 'RANGE', 'BONUS', 'IMAGE', 'TAGS', 'EXTRA_PAIR']
+const activeTabId = ref('')
+const createOpen = ref(false)
+const selectedType = ref<SheetTabType>('ATTRIBUTES')
+const newTabName = ref('')
 
 if (!schema.value.leveling) {
   schema.value.leveling = {
@@ -49,166 +31,195 @@ if (!schema.value.leveling) {
   }
 }
 
-if (!schema.value.sheetTexts) {
-  schema.value.sheetTexts = []
+schema.value.sheetTabs = normalizeSheetTabs(schema.value)
+if (!schema.value.sheetTabs.length) schema.value.sheetTabs = []
+fields.value = fieldsFromSheetTabs(schema.value.sheetTabs, fields.value)
+activeTabId.value = schema.value.sheetTabs[0]?.id || ''
+
+const activeTab = computed(() => tabs.value.find((tab) => tab.id === activeTabId.value) || tabs.value[0])
+const enabledTabs = computed(() => tabs.value.filter((tab) => tab.enabled !== false))
+const classes = computed(() => schema.value.classes || [])
+const classTargets = computed(() => {
+  const fromTabs = tabs.value
+    .filter((tab) => ['ATTRIBUTES', 'RESOURCES', 'SKILLS'].includes(tab.type))
+    .flatMap((tab) => (tab.records || []).map((record) => ({
+      key: keyFromLabel(`${tab.key}_${record.name}`),
+      label: record.name,
+      category: tab.type === 'ATTRIBUTES' ? 'ATTRIBUTE' : tab.type === 'RESOURCES' ? 'RESOURCE' : 'SKILL'
+    })))
+  const fromFields = fields.value
+    .filter((field) => field.type === 'NUMBER' && ['ATTRIBUTE', 'SKILL', 'RESOURCE', 'STATUS_BAR', 'NUMERIC_FIELD'].includes(field.category))
+    .map((field) => ({ key: field.key, label: field.label, category: field.category }))
+  const seen = new Set<string>()
+  return [...fromTabs, ...fromFields].filter((field) => {
+    if (seen.has(field.key)) return false
+    seen.add(field.key)
+    return true
+  })
+})
+
+watch(tabs, () => {
+  fields.value = fieldsFromSheetTabs(tabs.value, fields.value)
+}, { deep: true })
+
+function openCreate(type: SheetTabType = 'ATTRIBUTES') {
+  selectedType.value = type
+  newTabName.value = sheetTabTypeLabels[type]
+  createOpen.value = true
 }
 
-if (!schema.value.sheetLists) {
-  schema.value.sheetLists = []
+function createTab() {
+  const next = createSheetTab(selectedType.value, tabs.value.length)
+  next.name = newTabName.value.trim() || sheetTabTypeLabels[selectedType.value]
+  next.key = uniqueTabKey(keyFromLabel(next.name))
+  tabs.value = [...tabs.value, next]
+  activeTabId.value = next.id || ''
+  createOpen.value = false
 }
 
-if (!schema.value.sheetSections) {
-  schema.value.sheetSections = []
+function addQuickTab(type: SheetTabType) {
+  const next = createSheetTab(type, tabs.value.length)
+  next.key = uniqueTabKey(next.key)
+  tabs.value = [...tabs.value, next]
+  activeTabId.value = next.id || ''
 }
 
-if (!schema.value.rulesMarkdown) {
-  schema.value.rulesMarkdown = ''
+function uniqueTabKey(base: string, ignoreId = '') {
+  const clean = keyFromLabel(base || 'aba')
+  const used = new Set(tabs.value.filter((tab) => tab.id !== ignoreId).map((tab) => tab.key))
+  if (!used.has(clean)) return clean
+  let index = 2
+  while (used.has(`${clean}_${index}`)) index += 1
+  return `${clean}_${index}`
 }
 
-ensureDefaultSections()
-ensureSpecialLists()
-
-function keyFromLabel(label: string) {
-  return label
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/(^_|_$)/g, '')
+function syncTabKey(tab: SheetTab) {
+  tab.key = uniqueTabKey(tab.name, tab.id)
 }
 
-function addField(category: FieldCategory) {
-  const label = category === 'ATTRIBUTE' ? 'Novo atributo' : category === 'RESOURCE' ? 'Novo recurso' : category === 'SKILL' ? 'Nova pericia' : 'Novo campo'
-  const type: FieldType = category === 'TEXT_FIELD' ? 'TEXT' : category === 'LIST_FIELD' ? 'LIST' : category === 'ROLL_RULE' ? 'DICE' : 'NUMBER'
-  const nextIndex = fields.value.length + 1
-  fields.value.push({
-    key: `${keyFromLabel(label)}_${nextIndex}`,
-    label,
-    type,
-    category,
-    defaultValue: category === 'ATTRIBUTE' ? 0 : type === 'NUMBER' ? 0 : '',
-    optionsJson: type === 'LIST' ? ['Opcao A', 'Opcao B'] : undefined,
+function actionItems(tab: SheetTab) {
+  const index = tabs.value.findIndex((item) => item.id === tab.id)
+  return [
+    { key: 'up', label: 'Mover para cima', icon: GripVertical, disabled: index <= 0 },
+    { key: 'down', label: 'Mover para baixo', icon: GripVertical, disabled: index === tabs.value.length - 1 },
+    { key: 'duplicate', label: 'Duplicar', icon: Copy },
+    { key: 'toggle', label: tab.enabled === false ? 'Ativar na ficha' : 'Desativar na ficha', icon: tab.enabled === false ? Eye : EyeOff },
+    { key: 'delete', label: 'Apagar aba', icon: Trash2, danger: true }
+  ]
+}
+
+function handleAction(tab: SheetTab, action: string) {
+  const index = tabs.value.findIndex((item) => item.id === tab.id)
+  if (index < 0) return
+  if (action === 'up' || action === 'down') {
+    const next = [...tabs.value]
+    const target = action === 'up' ? index - 1 : index + 1
+    const current = next[index]
+    const targetTab = next[target]
+    if (!current || !targetTab) return
+    next[index] = targetTab
+    next[target] = current
+    tabs.value = next
+  }
+  if (action === 'duplicate') {
+    const clone = structuredClone(tab)
+    clone.id = uid('sheet_tab')
+    clone.name = `${tab.name} copia`
+    clone.key = uniqueTabKey(clone.name)
+    clone.order = tabs.value.length
+    clone.fields = clone.fields?.map((field) => ({ ...field, id: uid('sheet_field') }))
+    clone.records = clone.records?.map((record) => ({ ...record, id: uid('sheet_record') }))
+    tabs.value = [...tabs.value, clone]
+    activeTabId.value = clone.id || ''
+  }
+  if (action === 'toggle') tab.enabled = tab.enabled === false
+  if (action === 'delete') {
+    const confirmed = window.confirm('Apagar esta aba remove a estrutura do sistema. Dados ja salvos em personagens ficam preservados no JSON, mas deixam de aparecer enquanto a aba nao existir. Continuar?')
+    if (!confirmed) return
+    const next = tabs.value.filter((item) => item.id !== tab.id)
+    tabs.value = next
+    activeTabId.value = next[Math.max(0, index - 1)]?.id || ''
+  }
+}
+
+function addRecord(tab: SheetTab) {
+  tab.records ||= []
+  const nextIndex = tab.records.length + 1
+  tab.records.push({
+    id: uid('sheet_record'),
+    name: recordName(tab, nextIndex),
+    description: '',
+    text: '',
+    value: ['ATTRIBUTES', 'RESOURCES', 'SKILLS'].includes(tab.type) ? 0 : '',
+    min: null,
+    max: null,
+    damage: '',
+    roll: '',
+    cost: '',
+    range: '',
+    ability: '',
+    bonus: '',
+    effect: '',
+    quantity: null,
+    fields: {}
+  })
+}
+
+function recordName(tab: SheetTab, index: number) {
+  const labels: Partial<Record<SheetTabType, string>> = {
+    ATTRIBUTES: 'Atributo',
+    RESOURCES: 'Recurso',
+    SKILLS: 'Pericia',
+    ITEMS: 'Item',
+    WEAPONS: 'Arma',
+    TRAITS: 'Traco',
+    POWERS: 'Poder',
+    TEXT_BLOCKS: 'Bloco',
+    CONDITIONS: 'Condicao',
+    ROLLS: 'Rolagem',
+    CUSTOM: tab.name || 'Registro'
+  }
+  return `${labels[tab.type] || 'Registro'} ${index}`
+}
+
+function removeRecord(tab: SheetTab, index: number) {
+  tab.records?.splice(index, 1)
+}
+
+function addCustomField(tab: SheetTab) {
+  tab.fields ||= []
+  const nextIndex = tab.fields.length + 1
+  tab.fields.push({
+    id: uid('sheet_field'),
+    label: `Campo ${nextIndex}`,
+    key: `campo_${nextIndex}`,
+    type: 'SHORT_TEXT',
+    required: false,
+    defaultValue: '',
+    options: [],
     order: nextIndex
   })
 }
 
-function removeField(index: number) {
-  fields.value.splice(index, 1)
+function removeCustomField(tab: SheetTab, index: number) {
+  tab.fields?.splice(index, 1)
 }
 
-function addSheetText() {
-  schema.value.sheetTexts ||= []
-  const nextIndex = schema.value.sheetTexts.length + 1
-  schema.value.sheetTexts.push({
-    id: `sheet_text_${Date.now()}_${nextIndex}`,
-    name: `Texto ${nextIndex}`,
-    text: ''
-  })
-}
-
-function removeSheetText(index: number) {
-  schema.value.sheetTexts?.splice(index, 1)
-}
-
-function addSheetList() {
-  schema.value.sheetLists ||= []
-  const nextIndex = schema.value.sheetLists.length + 1
-  schema.value.sheetLists.push({
-    id: `sheet_list_${Date.now()}_${nextIndex}`,
-    key: `lista_${nextIndex}`,
-    name: `Lista ${nextIndex}`,
-    description: '',
-    allowDamage: true,
-    allowSkill: false,
-    allowExtras: true,
-    enabled: true
-  })
-}
-
-function removeSheetList(index: number) {
-  schema.value.sheetLists?.splice(index, 1)
-}
-
-function ensureDefaultSections() {
-  schema.value.sheetSections ||= []
-  for (const definition of builtInSectionDefinitions) {
-    const existing = schema.value.sheetSections.find((section) => section.key === definition.key)
-    if (existing) {
-      existing.title ||= definition.title
-      existing.multiple = definition.multiple
-      existing.longText = definition.longText
-      existing.allowDamage = definition.allowDamage
-      existing.allowSkill = definition.allowSkill
-      existing.allowExtras = definition.allowExtras
-      existing.enabled = existing.enabled !== false
-    } else {
-      schema.value.sheetSections.push({ id: `section_${definition.key}`, enabled: true, ...definition })
-    }
-  }
-}
-
-function ensureSpecialLists() {
-  schema.value.sheetLists ||= []
-  for (const definition of specialListDefinitions) {
-    const existing = schema.value.sheetLists.find((list) => list.key === definition.key)
-    if (existing) {
-      existing.enabled = existing.enabled !== false
-      existing.allowDamage = existing.allowDamage ?? definition.allowDamage
-      existing.allowSkill = existing.allowSkill ?? definition.allowSkill
-      existing.allowExtras = existing.allowExtras ?? definition.allowExtras
-    } else {
-      schema.value.sheetLists.push({ id: `sheet_list_${definition.key}`, ...definition })
-    }
-  }
-}
-
-function sheetListByKey(key: string) {
-  ensureSpecialLists()
-  return schema.value.sheetLists?.find((list) => list.key === key)
-}
-
-function customSheetLists() {
-  ensureSpecialLists()
-  return schema.value.sheetLists?.filter((list) => !specialListDefinitions.some((definition) => definition.key === list.key)) || []
-}
-
-function addCustomSheetList() {
-  schema.value.sheetLists ||= []
-  const nextIndex = customSheetLists().length + 1
-  schema.value.sheetLists.push({
-    id: `sheet_list_custom_${Date.now()}_${nextIndex}`,
-    key: `lista_personalizada_${nextIndex}`,
-    name: `Lista personalizada ${nextIndex}`,
-    description: '',
-    enabled: true,
-    allowDamage: false,
-    allowSkill: false,
-    allowExtras: true
-  })
-}
-
-function filtered(category: FieldCategory) {
-  return fields.value
-    .map((field, index) => ({ field, index }))
-    .filter((item) => item.field.category === category)
-}
-
-function ensureClasses() {
-  if (!schema.value.classes) schema.value.classes = []
-  return schema.value.classes
+function syncFieldKey(tab: SheetTabField) {
+  tab.key = keyFromLabel(tab.label)
 }
 
 function addClass() {
-  const nextIndex = ensureClasses().length + 1
-  const nextClass: SystemClass = {
-    id: `class_${Date.now()}_${nextIndex}`,
+  schema.value.classes ||= []
+  const nextIndex = schema.value.classes.length + 1
+  schema.value.classes.push({
+    id: uid('class'),
     key: `classe_${nextIndex}`,
     name: `Classe ${nextIndex}`,
     description: '',
     maxLevel: 5,
     levels: createLevels(5)
-  }
-  schema.value.classes?.push(nextClass)
+  })
 }
 
 function removeClass(index: number) {
@@ -230,20 +241,11 @@ function resizeClassLevels(rpgClass: SystemClass) {
 function addLevelChange(level: SystemClassLevel) {
   const target = classTargets.value[0]
   if (!target) return
-  level.changes.push({
-    targetKey: target.key,
-    targetLabel: target.label,
-    operation: 'ADD',
-    value: 1,
-    note: ''
-  })
+  level.changes.push({ targetKey: target.key, targetLabel: target.label, operation: 'ADD', value: 1, note: '' })
 }
 
 function addLevelText(level: SystemClassLevel) {
-  level.changes.push({
-    operation: 'NOTE',
-    note: 'Novo texto de classe para mostrar na ficha.'
-  })
+  level.changes.push({ operation: 'NOTE', note: 'Novo texto de classe para mostrar na ficha.' })
 }
 
 function levelActionItems() {
@@ -268,446 +270,344 @@ function syncTargetLabel(change: SystemClassLevelChange) {
   change.targetLabel = target?.label || change.targetKey
 }
 
-function categoryLabel(category: string) {
-  const labels: Record<string, string> = {
-    ATTRIBUTE: 'Atributo',
-    RESOURCE: 'Recurso',
-    SKILL: 'Pericia',
-    TEXT_FIELD: 'Informacao',
-    NUMERIC_FIELD: 'Numero',
-    BOOLEAN_FIELD: 'Sim/Nao',
-    LIST_FIELD: 'Lista',
-    FORMULA: 'Formula',
-    ROLL_RULE: 'Regra de rolagem',
-    STATUS_BAR: 'Barra de estado'
-  }
-  return labels[category] || category
+function fieldValue(record: SheetTabRecord, key: string) {
+  record.fields ||= {}
+  return record.fields[key]
+}
+
+function setFieldValue(record: SheetTabRecord, key: string, value: unknown) {
+  record.fields ||= {}
+  record.fields[key] = value
 }
 </script>
 
 <template>
   <div class="space-y-5">
-    <div class="flex gap-2 overflow-x-auto pb-1">
-      <button
-        v-for="(step, index) in steps"
-        :key="step"
-        type="button"
-        class="whitespace-nowrap rounded-lg border px-3 py-2 text-xs font-bold transition"
-        :class="current === index ? 'border-ember bg-ember/15 text-ember' : 'border-white/10 bg-white/[0.04] text-mist hover:text-white'"
-        @click="current = index"
-      >
-        {{ index + 1 }}. {{ step }}
-      </button>
-    </div>
-
-    <AppCard v-if="current === 0">
-      <h2 class="text-xl font-black text-white">Estrutura basica da ficha</h2>
-      <div class="mt-4 grid gap-4 md:grid-cols-2">
-        <label>
-          <span class="label">Recurso principal</span>
-          <input v-model="schema.primaryResource" class="input" placeholder="vida">
-        </label>
-        <label>
-          <span class="label">Rolagem padrao</span>
-          <input v-model="schema.defaultRoll" class="input" placeholder="1d20 + atributo">
-        </label>
-        <label class="md:col-span-2">
-          <span class="label">Notas internas do sistema</span>
-          <textarea v-model="schema.notes" rows="4" class="input" placeholder="Descreva regras, categorias e convencoes." />
-        </label>
-      </div>
-    </AppCard>
-
-    <AppCard v-else-if="currentStep === 'Regras de nivel'">
-      <h2 class="text-xl font-black text-white">Regras de atributos por nivel</h2>
-      <p class="muted mt-1">Essas regras travam a criacao do personagem para a ficha nascer balanceada.</p>
-      <div class="mt-4 grid gap-4 md:grid-cols-2">
-        <label>
-          <span class="label">Pontos de atributo no nivel 1</span>
-          <input v-model.number="schema.leveling!.levelOneAttributePoints" type="number" min="0" max="200" class="input">
-        </label>
-        <label>
-          <span class="label">Atributos ganhos por nivel</span>
-          <input v-model.number="schema.leveling!.attributesPerLevel" type="number" min="0" max="100" class="input">
-        </label>
-        <label>
-          <span class="label">Limite do atributo no nivel 1</span>
-          <input v-model.number="schema.leveling!.levelOneAttributeLimit" type="number" min="1" max="100" class="input">
-        </label>
-        <label>
-          <span class="label">Aumento do limite por nivel</span>
-          <input v-model.number="schema.leveling!.attributeLimitIncreasePerLevel" type="number" min="0" max="100" class="input">
-        </label>
-        <label>
-          <span class="label">Limite maximo do atributo</span>
-          <input v-model.number="schema.leveling!.maxAttributeLimit" type="number" min="1" max="200" class="input">
-        </label>
-      </div>
-    </AppCard>
-
-    <AppCard v-else-if="currentCategory">
-      <div class="flex items-center justify-between gap-3">
+    <AppCard>
+      <div class="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 class="text-xl font-black text-white">{{ steps[current] }}</h2>
-          <p class="muted">Campos flexiveis salvos no banco e renderizados dinamicamente na ficha.</p>
+          <h2 class="text-xl font-black text-white">Construtor da ficha</h2>
+          <p class="muted mt-1">Crie somente as abas que este sistema precisa. O personagem depois apenas preenche os valores.</p>
         </div>
-        <AppButton type="button" @click="addField(currentCategory)"><Plus class="h-4 w-4" />Adicionar</AppButton>
+        <AppButton type="button" @click="openCreate()"><Plus class="h-4 w-4" />Criar aba</AppButton>
       </div>
 
-      <div class="mt-5 space-y-3">
-        <div
-          v-for="{ field, index } in filtered(currentCategory)"
-          :key="field.id || index"
-          class="grid gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-3 md:grid-cols-2 xl:grid-cols-[1fr_1fr_150px_150px_auto]"
+      <div class="mt-4 flex gap-2 overflow-x-auto pb-1">
+        <button
+          v-for="type in tabTypes"
+          :key="type"
+          type="button"
+          class="whitespace-nowrap rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-bold text-mist transition hover:border-ember/40 hover:text-white"
+          @click="addQuickTab(type)"
         >
-          <label>
-            <span class="label">Nome</span>
-            <input v-model="field.label" class="input" @blur="field.key = field.key || keyFromLabel(field.label)">
-          </label>
-          <label>
-            <span class="label">Chave</span>
-            <input v-model="field.key" class="input">
-          </label>
-          <label>
-            <span class="label">Tipo</span>
-            <select v-model="field.type" class="select">
-              <option value="NUMBER">Numero</option>
-              <option value="TEXT">Texto</option>
-              <option value="BOOLEAN">Booleano</option>
-              <option value="LIST">Lista</option>
-              <option value="FORMULA">Formula</option>
-              <option value="DICE">Dado</option>
-            </select>
-          </label>
-          <label>
-            <span class="label">Padrao</span>
-            <input v-model="field.defaultValue" class="input">
-          </label>
-          <button type="button" class="self-end rounded-lg border border-flare/30 p-3 text-flare hover:bg-flare/10" title="Remover campo" @click="removeField(index)">
-            <Trash2 class="h-4 w-4" />
+          + {{ sheetTabTypeLabels[type] }}
+        </button>
+      </div>
+    </AppCard>
+
+    <div class="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
+      <AppCard>
+        <div class="flex items-center justify-between gap-3">
+          <h3 class="font-black text-white">Abas da ficha</h3>
+          <span class="rounded-md border border-white/10 px-2 py-1 text-xs font-bold text-mist">{{ tabs.length }}</span>
+        </div>
+
+        <EmptyState
+          v-if="!tabs.length"
+          class="mt-4"
+          :icon="FileText"
+          title="Nenhuma aba criada"
+          description="Comece vazio e adicione apenas o que a ficha deste sistema realmente usa."
+        >
+          <AppButton type="button" @click="openCreate()">Criar aba</AppButton>
+        </EmptyState>
+
+        <div v-else class="mt-4 space-y-2">
+          <button
+            v-for="tab in tabs"
+            :key="tab.id || tab.key"
+            type="button"
+            class="flex w-full items-center justify-between gap-3 rounded-lg border p-3 text-left transition"
+            :class="activeTab?.id === tab.id ? 'border-ember/45 bg-ember/10' : 'border-white/10 bg-white/[0.04] hover:border-white/20'"
+            @click="activeTabId = tab.id || ''"
+          >
+            <span class="min-w-0">
+              <span class="block truncate text-sm font-black text-white">{{ tab.name }}</span>
+              <span class="block truncate text-xs text-mist">{{ sheetTabTypeLabels[tab.type] }}</span>
+            </span>
+            <span class="shrink-0 text-xs font-bold" :class="tab.enabled === false ? 'text-mist' : 'text-ember'">{{ tab.enabled === false ? 'off' : 'on' }}</span>
           </button>
-          <label v-if="field.type === 'LIST'" class="md:col-span-2 xl:col-span-5">
-            <span class="label">Opcoes separadas por virgula</span>
-            <input :value="Array.isArray(field.optionsJson) ? field.optionsJson.join(', ') : field.optionsJson" class="input" @input="field.optionsJson = ($event.target as HTMLInputElement).value.split(',').map((item) => item.trim()).filter(Boolean)">
-          </label>
-          <label v-if="field.type === 'FORMULA' || field.category === 'ROLL_RULE'" class="md:col-span-2 xl:col-span-5">
-            <span class="label">Formula ou regra</span>
-            <input v-model="field.formula" class="input" placeholder="Defesa = 10 + agilidade">
-          </label>
         </div>
-        <div v-if="filtered(currentCategory).length === 0" class="rounded-lg border border-dashed border-white/15 p-8 text-center text-mist">
-          Nenhum campo aqui ainda.
-        </div>
-      </div>
-    </AppCard>
+      </AppCard>
 
-    <AppCard v-else-if="currentBuiltInSection">
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 class="text-xl font-black text-white">{{ currentBuiltInSection.title }}</h2>
-          <p class="muted mt-1">Esta aba define se essa secao existe na ficha e quais campos o jogador podera preencher.</p>
-        </div>
-        <label class="inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-sm font-bold text-white">
-          <input v-model="currentBuiltInSection.enabled" type="checkbox" class="accent-[var(--user-accent)]">
-          Usar na ficha
-        </label>
-      </div>
-
-      <div class="mt-5 grid gap-4 md:grid-cols-2">
-        <label>
-          <span class="label">Nome da aba na ficha</span>
-          <input v-model="currentBuiltInSection.title" class="input">
-        </label>
-        <label>
-          <span class="label">Chave interna</span>
-          <input v-model="currentBuiltInSection.key" class="input" readonly>
-        </label>
-      </div>
-
-      <div class="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <span class="soft-row p-3 text-sm text-mist">
-          <b class="block text-white">Nome</b>
-          Campo padrao sempre presente.
-        </span>
-        <span class="soft-row p-3 text-sm text-mist">
-          <b class="block text-white">Texto / descricao</b>
-          {{ currentBuiltInSection.longText ? 'Campo longo para texto de ficha.' : 'Campo de descricao.' }}
-        </span>
-        <label v-if="currentBuiltInSection.allowDamage" class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white">
-          <input v-model="currentBuiltInSection.allowDamage" type="checkbox" class="accent-[var(--user-accent)]">
-          Dano
-        </label>
-        <label v-if="currentBuiltInSection.allowSkill" class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white">
-          <input v-model="currentBuiltInSection.allowSkill" type="checkbox" class="accent-[var(--user-accent)]">
-          Habilidade opcional
-        </label>
-      </div>
-
-      <div class="mt-5 rounded-lg border border-white/10 bg-white/[0.04] p-4">
-        <p class="text-xs font-black uppercase tracking-[0.12em] text-ember">Como ficara para o jogador</p>
-        <p class="mt-2 text-sm leading-6 text-mist">
-          {{ currentBuiltInSection.multiple ? 'O jogador podera adicionar varios registros nesta secao.' : 'O jogador preenchera um bloco unico desta secao.' }}
-          A estrutura vem deste sistema; a ficha apenas salva os valores preenchidos pelo personagem.
-        </p>
-      </div>
-    </AppCard>
-
-    <AppCard v-else-if="currentStep === 'Regras gerais'">
-      <h2 class="text-xl font-black text-white">Regras gerais</h2>
-      <p class="muted mt-1">Texto do sistema para regras, combate, magia, dano e observacoes. Na ficha ele aparece como leitura, sem ser um campo pessoal do personagem.</p>
-      <label class="mt-5 block">
-        <span class="label">Markdown do sistema</span>
-        <textarea v-model="schema.rulesMarkdown" rows="12" class="input" placeholder="# Combate&#10;Use este espaco para regras gerais do sistema." />
-      </label>
-    </AppCard>
-
-    <AppCard v-else-if="currentStep === 'Lista de equipamentos' && sheetListByKey('equipment')">
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 class="text-xl font-black text-white">Lista de equipamentos</h2>
-          <p class="muted mt-1">Configure a lista de equipamentos que a ficha do personagem podera preencher.</p>
-        </div>
-        <label class="inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-sm font-bold text-white">
-          <input v-model="sheetListByKey('equipment')!.enabled" type="checkbox" class="accent-[var(--user-accent)]">
-          Usar na ficha
-        </label>
-      </div>
-      <div class="mt-5 grid gap-4 md:grid-cols-2">
-        <label>
-          <span class="label">Nome da lista</span>
-          <input v-model="sheetListByKey('equipment')!.name" class="input">
-        </label>
-        <label>
-          <span class="label">Chave interna</span>
-          <input v-model="sheetListByKey('equipment')!.key" class="input" readonly>
-        </label>
-        <label class="md:col-span-2">
-          <span class="label">Descricao</span>
-          <textarea v-model="sheetListByKey('equipment')!.description" rows="3" class="input" />
-        </label>
-      </div>
-      <div class="mt-3 grid gap-2 sm:grid-cols-3">
-        <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="sheetListByKey('equipment')!.allowDamage" type="checkbox" class="accent-[var(--user-accent)]">Dano fixo</label>
-        <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="sheetListByKey('equipment')!.allowSkill" type="checkbox" class="accent-[var(--user-accent)]">Habilidade</label>
-        <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="sheetListByKey('equipment')!.allowExtras" type="checkbox" class="accent-[var(--user-accent)]">Campos extras com +</label>
-      </div>
-    </AppCard>
-
-    <AppCard v-else-if="currentStep === 'Lista de magias' && sheetListByKey('spells')">
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 class="text-xl font-black text-white">Lista de magias</h2>
-          <p class="muted mt-1">Configure a lista de magias, tecnicas ou poderes especiais da ficha.</p>
-        </div>
-        <label class="inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-sm font-bold text-white">
-          <input v-model="sheetListByKey('spells')!.enabled" type="checkbox" class="accent-[var(--user-accent)]">
-          Usar na ficha
-        </label>
-      </div>
-      <div class="mt-5 grid gap-4 md:grid-cols-2">
-        <label>
-          <span class="label">Nome da lista</span>
-          <input v-model="sheetListByKey('spells')!.name" class="input">
-        </label>
-        <label>
-          <span class="label">Chave interna</span>
-          <input v-model="sheetListByKey('spells')!.key" class="input" readonly>
-        </label>
-        <label class="md:col-span-2">
-          <span class="label">Descricao</span>
-          <textarea v-model="sheetListByKey('spells')!.description" rows="3" class="input" />
-        </label>
-      </div>
-      <div class="mt-3 grid gap-2 sm:grid-cols-3">
-        <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="sheetListByKey('spells')!.allowDamage" type="checkbox" class="accent-[var(--user-accent)]">Dano</label>
-        <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="sheetListByKey('spells')!.allowSkill" type="checkbox" class="accent-[var(--user-accent)]">Custo / alcance / habilidade</label>
-        <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="sheetListByKey('spells')!.allowExtras" type="checkbox" class="accent-[var(--user-accent)]">Campos extras com +</label>
-      </div>
-    </AppCard>
-
-    <AppCard v-else-if="currentStep === 'Lista personalizada'">
-      <div class="flex items-center justify-between gap-3">
-        <div>
-          <h2 class="text-xl font-black text-white">Lista personalizada / Outro</h2>
-          <p class="muted">Adicione listas proprias do sistema, sem prender a ficha a um RPG especifico.</p>
-        </div>
-        <AppButton type="button" @click="addCustomSheetList"><Plus class="h-4 w-4" />Adicionar lista</AppButton>
-      </div>
-
-      <div class="mt-5 space-y-3">
-        <div v-for="(item, index) in customSheetLists()" :key="item.id || item.key" class="rounded-lg border border-white/10 bg-white/[0.04] p-3">
-          <div class="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
-            <label>
-              <span class="label">Nome</span>
-              <input v-model="item.name" class="input" placeholder="Lista de reputacoes" @blur="item.key = item.key || keyFromLabel(item.name)">
-            </label>
-            <label>
-              <span class="label">Chave</span>
-              <input v-model="item.key" class="input">
-            </label>
-            <button type="button" class="self-end rounded-lg border border-flare/30 p-3 text-flare hover:bg-flare/10" title="Remover lista" @click="removeSheetList((schema.sheetLists || []).findIndex((list) => list === item))">
-              <Trash2 class="h-4 w-4" />
-            </button>
-            <label class="md:col-span-3">
-              <span class="label">Descricao</span>
-              <textarea v-model="item.description" rows="2" class="input" />
-            </label>
+      <div class="space-y-5">
+        <AppCard v-if="activeTab">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p class="text-xs font-black uppercase tracking-[0.12em] text-ember">{{ sheetTabTypeLabels[activeTab.type] }}</p>
+              <h2 class="mt-1 text-xl font-black text-white">{{ activeTab.name }}</h2>
+              <p v-if="activeTab.description" class="mt-1 text-sm text-mist">{{ activeTab.description }}</p>
+            </div>
+            <AppActionMenu :items="actionItems(activeTab)" title="Acoes da aba" @select="handleAction(activeTab, $event)" />
           </div>
-          <div class="mt-3 grid gap-2 sm:grid-cols-3">
-            <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="item.enabled" type="checkbox" class="accent-[var(--user-accent)]">Usar na ficha</label>
-            <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="item.allowDamage" type="checkbox" class="accent-[var(--user-accent)]">Dano</label>
-            <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="item.allowSkill" type="checkbox" class="accent-[var(--user-accent)]">Habilidade</label>
-            <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="item.allowExtras" type="checkbox" class="accent-[var(--user-accent)]">Campos extras com +</label>
-          </div>
-        </div>
-        <div v-if="!customSheetLists().length" class="rounded-lg border border-dashed border-white/15 p-8 text-center text-mist">
-          Nenhuma lista personalizada ainda.
-        </div>
-      </div>
-    </AppCard>
 
-    <AppCard v-else-if="currentStep === 'Classes'">
-      <div class="flex items-center justify-between gap-3">
-        <div>
-          <h2 class="text-xl font-black text-white">Classes e progresso por nivel</h2>
-          <p class="muted">Defina bonus automaticos e textos de classe que aparecem na ficha do personagem.</p>
-        </div>
-        <AppButton type="button" :disabled="classTargets.length === 0" @click="addClass"><Plus class="h-4 w-4" />Adicionar classe</AppButton>
-      </div>
-
-      <div v-if="classTargets.length === 0" class="mt-5 rounded-lg border border-dashed border-white/15 p-8 text-center text-mist">
-        Crie atributos, pericias ou recursos antes de montar classes.
-      </div>
-
-      <div class="mt-5 space-y-4">
-        <div v-for="(rpgClass, classIndex) in classes" :key="rpgClass.id || classIndex" class="rounded-lg border border-white/10 bg-white/[0.04] p-4">
-          <div class="grid gap-3 lg:grid-cols-[1fr_1fr_140px_auto]">
+          <div class="mt-5 grid gap-4 md:grid-cols-2">
             <label>
-              <span class="label">Nome da classe</span>
-              <input v-model="rpgClass.name" class="input" @blur="rpgClass.key = rpgClass.key || keyFromLabel(rpgClass.name)">
+              <span class="label">Nome da aba</span>
+              <input v-model="activeTab.name" class="input" @blur="syncTabKey(activeTab)">
             </label>
             <label>
-              <span class="label">Chave</span>
-              <input v-model="rpgClass.key" class="input">
+              <span class="label">Tipo da aba</span>
+              <select v-model="activeTab.type" class="select">
+                <option v-for="type in tabTypes" :key="type" :value="type">{{ sheetTabTypeLabels[type] }}</option>
+              </select>
             </label>
-            <label>
-              <span class="label">Niveis</span>
-              <input v-model.number="rpgClass.maxLevel" type="number" min="1" max="100" class="input" @change="resizeClassLevels(rpgClass)">
-            </label>
-            <button type="button" class="self-end rounded-lg border border-flare/30 p-3 text-flare hover:bg-flare/10" title="Remover classe" @click="removeClass(classIndex)">
-              <Trash2 class="h-4 w-4" />
-            </button>
-            <label class="lg:col-span-4">
-              <span class="label">Descricao</span>
-              <textarea v-model="rpgClass.description" rows="2" class="input" placeholder="Papel da classe, estilo de jogo, restricoes..." />
+            <label class="md:col-span-2">
+              <span class="label">Descricao opcional</span>
+              <textarea v-model="activeTab.description" rows="2" class="input" />
             </label>
           </div>
 
-          <div class="mt-4 max-h-[520px] space-y-3 overflow-y-auto pr-2">
-            <div v-for="level in rpgClass.levels" :key="level.level" class="rounded-lg border border-white/10 bg-panel/70 p-3">
-              <div class="flex items-center justify-between gap-3">
-                <h3 class="font-black text-white">Nivel {{ level.level }}</h3>
-                <AppActionMenu
-                  title="Adicionar ao nivel"
-                  trigger-class="grid h-9 w-9 place-items-center rounded-lg border border-white/10 bg-white/[0.06] text-mist transition hover:border-ember/40 hover:text-ember"
-                  :items="levelActionItems()"
-                  @select="handleLevelAction(level, $event)"
-                >
-                  <Plus class="h-4 w-4" />
-                </AppActionMenu>
+          <div class="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="activeTab.enabled" type="checkbox" class="accent-[var(--user-accent)]">Aparece na ficha</label>
+            <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="activeTab.readonly" type="checkbox" class="accent-[var(--user-accent)]">Somente leitura</label>
+            <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="activeTab.playerEditable" :disabled="activeTab.readonly" type="checkbox" class="accent-[var(--user-accent)]">Jogador edita</label>
+            <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="activeTab.allowMultiple" type="checkbox" class="accent-[var(--user-accent)]">Multiplos registros</label>
+            <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="activeTab.allowExtraFields" type="checkbox" class="accent-[var(--user-accent)]">Campos extras</label>
+            <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="activeTab.allowRolls" type="checkbox" class="accent-[var(--user-accent)]">Rolagens</label>
+            <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="activeTab.allowBonuses" type="checkbox" class="accent-[var(--user-accent)]">Bonus/aumentos</label>
+            <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="activeTab.allowDamageCostAbility" type="checkbox" class="accent-[var(--user-accent)]">Dano/custo/habilidade</label>
+          </div>
+
+          <details class="mt-4 rounded-lg border border-white/10 bg-white/[0.04] p-3">
+            <summary class="cursor-pointer text-sm font-black text-white">Configuracoes avancadas</summary>
+            <label class="mt-3 block">
+              <span class="label">Chave interna gerada</span>
+              <input v-model="activeTab.key" class="input" @blur="activeTab.key = uniqueTabKey(activeTab.key, activeTab.id)">
+            </label>
+          </details>
+        </AppCard>
+
+        <AppCard v-if="activeTab?.type === 'RULES'">
+          <h3 class="text-lg font-black text-white">Texto Markdown do sistema</h3>
+          <p class="muted mt-1">Este conteudo pertence ao sistema e aparece na ficha como leitura.</p>
+          <textarea v-model="activeTab.systemMarkdown" rows="14" class="input mt-4" placeholder="# Regras de combate&#10;Escreva as regras gerais aqui." />
+        </AppCard>
+
+        <AppCard v-else-if="activeTab?.type === 'CLASS_PROGRESS'">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 class="text-lg font-black text-white">Classes e progresso</h3>
+              <p class="muted mt-1">Reaproveita a logica de bonus por nivel ja usada pela ficha.</p>
+            </div>
+            <AppButton type="button" :disabled="classTargets.length === 0" @click="addClass"><Plus class="h-4 w-4" />Adicionar classe</AppButton>
+          </div>
+
+          <p v-if="classTargets.length === 0" class="mt-4 rounded-lg border border-dashed border-white/15 p-4 text-sm text-mist">Crie atributos, recursos ou pericias antes de configurar bonus por nivel.</p>
+
+          <div class="mt-5 space-y-4">
+            <div v-for="(rpgClass, classIndex) in classes" :key="rpgClass.id || classIndex" class="rounded-lg border border-white/10 bg-white/[0.04] p-4">
+              <div class="grid gap-3 lg:grid-cols-[1fr_120px_auto]">
+                <label>
+                  <span class="label">Nome da classe</span>
+                  <input v-model="rpgClass.name" class="input" @blur="rpgClass.key = keyFromLabel(rpgClass.name)">
+                </label>
+                <label>
+                  <span class="label">Niveis</span>
+                  <input v-model.number="rpgClass.maxLevel" type="number" min="1" max="100" class="input" @change="resizeClassLevels(rpgClass)">
+                </label>
+                <button type="button" class="self-end rounded-lg border border-flare/30 p-3 text-flare hover:bg-flare/10" title="Remover classe" @click="removeClass(classIndex)">
+                  <Trash2 class="h-4 w-4" />
+                </button>
+                <label class="lg:col-span-3">
+                  <span class="label">Descricao</span>
+                  <textarea v-model="rpgClass.description" rows="2" class="input" />
+                </label>
               </div>
 
-              <div class="mt-3 space-y-2">
-                <div
-                  v-for="(change, changeIndex) in level.changes"
-                  :key="changeIndex"
-                  class="grid gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-2"
-                  :class="change.operation === 'NOTE' ? 'lg:grid-cols-[1fr_auto]' : 'lg:grid-cols-[1fr_110px_110px_1fr_auto]'"
-                >
-                  <label v-if="change.operation === 'NOTE'">
-                    <span class="label">Texto que aparece na ficha</span>
-                    <textarea v-model="change.note" rows="2" class="input" placeholder="No nivel 3, a classe Urso ganha pele grossa e recebe +3 de armadura." />
-                  </label>
-                  <label v-else>
-                    <span class="label">Alvo</span>
-                    <select v-model="change.targetKey" class="select" @change="syncTargetLabel(change)">
-                      <option v-for="target in classTargets" :key="target.key" :value="target.key">{{ target.label }} ({{ target.category }})</option>
-                    </select>
-                  </label>
-                  <label v-if="change.operation !== 'NOTE'">
-                    <span class="label">Regra</span>
-                    <select v-model="change.operation" class="select">
-                      <option value="ADD">Somar</option>
-                      <option value="SET">Definir</option>
-                      <option value="NOTE">Texto</option>
-                    </select>
-                  </label>
-                  <label v-if="change.operation !== 'NOTE'">
-                    <span class="label">Valor</span>
-                    <input v-model.number="change.value" type="number" class="input">
-                  </label>
-                  <label v-if="change.operation !== 'NOTE'">
-                    <span class="label">Nota</span>
-                    <input v-model="change.note" class="input" placeholder="+1 em Forca, proficiencia...">
-                  </label>
-                  <button type="button" class="self-end rounded-lg border border-flare/30 p-3 text-flare hover:bg-flare/10" title="Remover alteracao" @click="removeLevelChange(level, changeIndex)">
-                    <Trash2 class="h-4 w-4" />
-                  </button>
+              <div class="mt-4 max-h-[520px] space-y-3 overflow-y-auto pr-2">
+                <div v-for="level in rpgClass.levels" :key="level.level" class="rounded-lg border border-white/10 bg-panel/70 p-3">
+                  <div class="flex items-center justify-between gap-3">
+                    <h4 class="font-black text-white">Nivel {{ level.level }}</h4>
+                    <AppActionMenu title="Adicionar ao nivel" :items="levelActionItems()" @select="handleLevelAction(level, $event)">
+                      <Plus class="h-4 w-4" />
+                    </AppActionMenu>
+                  </div>
+                  <div class="mt-3 space-y-2">
+                    <div v-for="(change, changeIndex) in level.changes" :key="changeIndex" class="grid gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-2" :class="change.operation === 'NOTE' ? 'lg:grid-cols-[1fr_auto]' : 'lg:grid-cols-[1fr_110px_110px_1fr_auto]'">
+                      <label v-if="change.operation === 'NOTE'"><span class="label">Texto na ficha</span><textarea v-model="change.note" rows="2" class="input" /></label>
+                      <label v-else><span class="label">Alvo</span><select v-model="change.targetKey" class="select" @change="syncTargetLabel(change)"><option v-for="target in classTargets" :key="target.key" :value="target.key">{{ target.label }}</option></select></label>
+                      <label v-if="change.operation !== 'NOTE'"><span class="label">Regra</span><select v-model="change.operation" class="select"><option value="ADD">Somar</option><option value="SET">Definir</option><option value="NOTE">Texto</option></select></label>
+                      <label v-if="change.operation !== 'NOTE'"><span class="label">Valor</span><input v-model.number="change.value" type="number" class="input"></label>
+                      <label v-if="change.operation !== 'NOTE'"><span class="label">Nota</span><input v-model="change.note" class="input"></label>
+                      <button type="button" class="self-end rounded-lg border border-flare/30 p-3 text-flare hover:bg-flare/10" title="Remover alteracao" @click="removeLevelChange(level, changeIndex)"><Trash2 class="h-4 w-4" /></button>
+                    </div>
+                  </div>
                 </div>
-                <p v-if="level.changes.length === 0" class="rounded-lg border border-dashed border-white/10 p-3 text-sm text-mist">Sem alteracoes neste nivel.</p>
               </div>
             </div>
           </div>
-        </div>
-      </div>
-    </AppCard>
+        </AppCard>
 
-    <AppCard v-else-if="currentStep === 'Preview'">
-      <h2 class="text-xl font-black text-white">Pre-visualizacao da ficha</h2>
-      <div class="mt-5 grid gap-4 md:grid-cols-2">
-        <div v-for="field in fields" :key="field.key" class="rounded-lg border border-white/10 bg-white/[0.04] p-3">
-          <p class="text-xs font-bold uppercase tracking-[0.12em] text-ember">{{ categoryLabel(field.category) }}</p>
-          <p class="mt-1 font-bold text-white">{{ field.label }}</p>
-          <p class="text-sm text-mist">Tipo: {{ field.type }} | Padrao: {{ field.defaultValue }}</p>
-        </div>
-      </div>
-      <div v-if="classes.length" class="mt-5">
-        <h3 class="text-lg font-black text-white">Classes</h3>
-        <div class="mt-3 grid gap-4 md:grid-cols-2">
-          <div v-for="rpgClass in classes" :key="rpgClass.id || rpgClass.key" class="rounded-lg border border-white/10 bg-white/[0.04] p-3">
-            <p class="font-black text-white">{{ rpgClass.name }}</p>
-            <p class="text-sm text-mist">{{ rpgClass.maxLevel }} niveis | {{ rpgClass.levels.reduce((sum, level) => sum + level.changes.length, 0) }} alteracoes</p>
+        <AppCard v-else-if="activeTab">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 class="text-lg font-black text-white">Registros e campos</h3>
+              <p class="muted mt-1">Estes registros viram a estrutura que o personagem preenche.</p>
+            </div>
+            <AppButton type="button" @click="addRecord(activeTab)"><Plus class="h-4 w-4" />Adicionar {{ activeTab.name }}</AppButton>
           </div>
-        </div>
-      </div>
-      <div v-if="schema.sheetSections?.length" class="mt-5">
-        <h3 class="text-lg font-black text-white">Secoes da ficha</h3>
-        <div class="mt-3 grid gap-4 md:grid-cols-2">
-          <div v-for="item in schema.sheetSections.filter((section) => section.enabled !== false)" :key="item.id || item.key" class="rounded-lg border border-white/10 bg-white/[0.04] p-3">
-            <p class="font-black text-white">{{ item.title }}</p>
-            <p class="mt-1 text-sm leading-6 text-mist">{{ item.multiple ? 'Lista preenchida pelo jogador.' : 'Bloco unico preenchido pelo jogador.' }}</p>
-          </div>
-        </div>
-      </div>
-      <div v-if="schema.rulesMarkdown" class="mt-5 rounded-lg border border-white/10 bg-white/[0.04] p-3">
-        <h3 class="text-lg font-black text-white">Regras gerais</h3>
-        <p class="mt-1 text-sm text-mist">Texto Markdown definido no sistema para leitura na ficha.</p>
-      </div>
-      <div v-if="schema.sheetLists?.some((list) => list.enabled !== false)" class="mt-5">
-        <h3 class="text-lg font-black text-white">Listas especiais</h3>
-        <div class="mt-3 grid gap-4 md:grid-cols-2">
-          <div v-for="item in schema.sheetLists.filter((list) => list.enabled !== false)" :key="item.id || item.key" class="rounded-lg border border-white/10 bg-white/[0.04] p-3">
-            <p class="font-black text-white">{{ item.name }}</p>
-            <p class="mt-1 text-sm leading-6 text-mist">{{ item.description || 'Lista editavel na ficha.' }}</p>
-          </div>
-        </div>
-      </div>
-    </AppCard>
 
-    <AppCard v-else>
-      <h2 class="text-xl font-black text-white">Publicar sistema</h2>
-      <p class="mt-2 text-mist">Revise os campos, escolha a visibilidade e salve. O sistema ficara pronto para gerar fichas dinamicas.</p>
-      <slot name="publish" />
-    </AppCard>
+          <div v-if="activeTab.type === 'CUSTOM'" class="mt-5 rounded-lg border border-white/10 bg-white/[0.04] p-4">
+            <div class="flex items-center justify-between gap-3">
+              <h4 class="font-black text-white">Campos personalizados</h4>
+              <AppButton type="button" variant="ghost" @click="addCustomField(activeTab)"><Plus class="h-4 w-4" />Campo</AppButton>
+            </div>
+            <div class="mt-3 space-y-3">
+              <div v-for="(field, fieldIndex) in activeTab.fields || []" :key="field.id || fieldIndex" class="grid gap-3 rounded-lg border border-white/10 bg-panel/70 p-3 md:grid-cols-[1fr_170px_auto]">
+                <label><span class="label">Nome do campo</span><input v-model="field.label" class="input" @blur="syncFieldKey(field)"></label>
+                <label><span class="label">Tipo</span><select v-model="field.type" class="select"><option v-for="type in fieldTypes" :key="type" :value="type">{{ sheetFieldTypeLabels[type] }}</option></select></label>
+                <button type="button" class="self-end rounded-lg border border-flare/30 p-3 text-flare hover:bg-flare/10" title="Remover campo" @click="removeCustomField(activeTab, fieldIndex)"><Trash2 class="h-4 w-4" /></button>
+                <label v-if="field.type === 'SELECT'" class="md:col-span-3"><span class="label">Opcoes separadas por virgula</span><input :value="field.options?.join(', ')" class="input" @input="field.options = ($event.target as HTMLInputElement).value.split(',').map((item) => item.trim()).filter(Boolean)"></label>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-5 space-y-3">
+            <div v-for="(record, recordIndex) in activeTab.records || []" :key="record.id || recordIndex" class="rounded-lg border border-white/10 bg-white/[0.04] p-4">
+              <div class="grid gap-3 md:grid-cols-[1fr_auto]">
+                <label>
+                  <span class="label">Nome</span>
+                  <input v-model="record.name" class="input" placeholder="Nome do registro">
+                </label>
+                <button type="button" class="self-end rounded-lg border border-flare/30 p-3 text-flare hover:bg-flare/10" title="Remover registro" @click="removeRecord(activeTab, recordIndex)">
+                  <Trash2 class="h-4 w-4" />
+                </button>
+              </div>
+
+              <div class="mt-3 grid gap-3 md:grid-cols-2">
+                <label v-if="['ATTRIBUTES', 'RESOURCES', 'SKILLS'].includes(activeTab.type)">
+                  <span class="label">Valor padrao</span>
+                  <input v-model="record.value" type="number" class="input">
+                </label>
+                <label v-if="activeTab.type === 'ATTRIBUTES'">
+                  <span class="label">Limite minimo</span>
+                  <input v-model.number="record.min" type="number" class="input" placeholder="Opcional">
+                </label>
+                <label v-if="['ATTRIBUTES', 'RESOURCES'].includes(activeTab.type)">
+                  <span class="label">{{ activeTab.type === 'RESOURCES' ? 'Valor maximo' : 'Limite maximo' }}</span>
+                  <input v-model.number="record.max" type="number" class="input" placeholder="Opcional">
+                </label>
+                <label v-if="activeTab.type === 'SKILLS'">
+                  <span class="label">Atributo relacionado</span>
+                  <input v-model="record.relatedAttribute" class="input" placeholder="Opcional">
+                </label>
+                <label v-if="activeTab.allowDamageCostAbility">
+                  <span class="label">Dano</span>
+                  <input v-model="record.damage" class="input" placeholder="1d8">
+                </label>
+                <label v-if="activeTab.allowDamageCostAbility && activeTab.type === 'POWERS'">
+                  <span class="label">Custo</span>
+                  <input v-model="record.cost" class="input" placeholder="2 PE">
+                </label>
+                <label v-if="activeTab.allowDamageCostAbility && activeTab.type === 'POWERS'">
+                  <span class="label">Alcance</span>
+                  <input v-model="record.range" class="input" placeholder="Curto">
+                </label>
+                <label v-if="activeTab.allowDamageCostAbility && ['WEAPONS', 'ITEMS'].includes(activeTab.type)">
+                  <span class="label">Habilidade</span>
+                  <input v-model="record.ability" class="input" placeholder="Opcional">
+                </label>
+                <label v-if="activeTab.allowRolls">
+                  <span class="label">Rolagem</span>
+                  <input v-model="record.roll" class="input" placeholder="1d20 + atributo">
+                </label>
+                <label v-if="activeTab.allowBonuses">
+                  <span class="label">Bonus / aumento</span>
+                  <input v-model="record.bonus" class="input" placeholder="+1 Potencia">
+                </label>
+                <label v-if="activeTab.type === 'ITEMS'">
+                  <span class="label">Quantidade padrao</span>
+                  <input v-model.number="record.quantity" type="number" class="input" placeholder="Opcional">
+                </label>
+                <label class="md:col-span-2">
+                  <span class="label">Texto / descricao</span>
+                  <textarea v-model="record.description" rows="3" class="input" />
+                </label>
+              </div>
+
+              <div v-if="activeTab.type === 'CUSTOM' && activeTab.fields?.length" class="mt-3 grid gap-3 md:grid-cols-2">
+                <label v-for="field in activeTab.fields" :key="field.id || field.key" :class="['LONG_TEXT', 'LIST'].includes(field.type) ? 'md:col-span-2' : ''">
+                  <span class="label">{{ field.label }}</span>
+                  <textarea v-if="field.type === 'LONG_TEXT'" :value="String(fieldValue(record, field.key) ?? field.defaultValue ?? '')" rows="3" class="input" @input="setFieldValue(record, field.key, ($event.target as HTMLTextAreaElement).value)" />
+                  <input v-else-if="field.type === 'NUMBER'" :value="fieldValue(record, field.key) ?? field.defaultValue ?? 0" type="number" class="input" @input="setFieldValue(record, field.key, Number(($event.target as HTMLInputElement).value))">
+                  <select v-else-if="field.type === 'SELECT'" :value="String(fieldValue(record, field.key) ?? field.defaultValue ?? '')" class="select" @change="setFieldValue(record, field.key, ($event.target as HTMLSelectElement).value)">
+                    <option v-for="option in field.options || []" :key="option" :value="option">{{ option }}</option>
+                  </select>
+                  <input v-else :value="String(fieldValue(record, field.key) ?? field.defaultValue ?? '')" class="input" @input="setFieldValue(record, field.key, ($event.target as HTMLInputElement).value)">
+                </label>
+              </div>
+            </div>
+
+            <EmptyState v-if="!(activeTab.records || []).length" :icon="FileText" title="Nenhum registro criado" description="Adicione os blocos, itens, atributos ou modelos que vao aparecer para o personagem preencher.">
+              <AppButton type="button" @click="addRecord(activeTab)"><Plus class="h-4 w-4" />Adicionar</AppButton>
+            </EmptyState>
+          </div>
+        </AppCard>
+
+        <AppCard>
+          <h3 class="text-lg font-black text-white">Preview da ficha</h3>
+          <div v-if="enabledTabs.length" class="mt-4 grid gap-3 md:grid-cols-2">
+            <div v-for="tab in enabledTabs" :key="tab.id || tab.key" class="rounded-lg border border-white/10 bg-white/[0.04] p-3">
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <p class="font-black text-white">{{ tab.name }}</p>
+                  <p class="mt-1 text-xs text-mist">{{ sheetTabTypeLabels[tab.type] }} | {{ tab.readonly ? 'Leitura' : tab.playerEditable === false ? 'Bloqueada' : 'Editavel' }}</p>
+                </div>
+                <span class="rounded-md border border-white/10 px-2 py-1 text-xs font-bold text-mist">{{ tab.records?.length || (tab.type === 'RULES' ? 1 : 0) }}</span>
+              </div>
+              <p v-if="tab.description" class="mt-2 text-sm leading-6 text-mist">{{ tab.description }}</p>
+            </div>
+          </div>
+          <p v-else class="mt-4 rounded-lg border border-dashed border-white/15 p-4 text-sm text-mist">A ficha ainda nao exibira abas opcionais.</p>
+        </AppCard>
+
+        <AppCard>
+          <h2 class="text-xl font-black text-white">Publicar sistema</h2>
+          <p class="mt-2 text-mist">Revise a estrutura, escolha a visibilidade no cadastro do sistema e salve.</p>
+          <slot name="publish" />
+        </AppCard>
+      </div>
+    </div>
+
+    <Teleport to="body">
+      <div v-if="createOpen" class="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" @click.self="createOpen = false">
+        <div class="w-full max-w-2xl rounded-xl border border-white/10 bg-panel p-5 shadow-soft">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <h2 class="text-xl font-black text-white">Criar aba da ficha</h2>
+              <p class="mt-1 text-sm text-mist">Escolha um tipo pronto ou use uma aba personalizada.</p>
+            </div>
+            <button type="button" class="rounded-lg border border-white/10 p-2 text-mist hover:text-white" @click="createOpen = false"><X class="h-4 w-4" /></button>
+          </div>
+          <div class="mt-5 grid gap-4 md:grid-cols-2">
+            <label>
+              <span class="label">Tipo da aba</span>
+              <select v-model="selectedType" class="select" @change="newTabName = sheetTabTypeLabels[selectedType]">
+                <option v-for="type in tabTypes" :key="type" :value="type">{{ sheetTabTypeLabels[type] }}</option>
+              </select>
+            </label>
+            <label>
+              <span class="label">Nome da aba</span>
+              <input v-model="newTabName" class="input" placeholder="Armas, Magias, Biografia...">
+            </label>
+          </div>
+          <div class="mt-5 flex justify-end gap-2">
+            <AppButton type="button" variant="ghost" @click="createOpen = false">Cancelar</AppButton>
+            <AppButton type="button" @click="createTab"><Plus class="h-4 w-4" />Criar aba</AppButton>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
