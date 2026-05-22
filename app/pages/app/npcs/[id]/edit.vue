@@ -18,3 +18,4 @@ const { data } = await useFetch<{ npc: {
 <template>
   <NpcForm v-if="data?.npc" mode="edit" :npc="data.npc" />
 </template>
+

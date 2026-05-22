@@ -38,6 +38,8 @@ const { data, refresh } = await useFetch<{ system: {
 
 const isOwner = computed(() => data.value?.system.createdById === auth.user?.id)
 const isRejected = computed(() => data.value?.system.moderationStatus === 'REJECTED')
+const isPending = computed(() => data.value?.system.moderationStatus === 'PENDING')
+const canUseSystem = computed(() => data.value?.system.moderationStatus === 'APPROVED')
 const classes = computed(() => data.value?.system.schemaJson?.classes || [])
 const systemVersion = computed(() => String((data.value?.system.schemaJson as any)?.version || 'v1'))
 const originalCreator = computed(() => (data.value?.system.schemaJson as any)?.provenance?.originalCreatorName || data.value?.system.createdBy?.name || 'Toca dos Nerds')
@@ -143,7 +145,7 @@ async function handleOwnerAction(action: string) {
 
 function visitorActions() {
   return [
-    { key: 'copy', label: 'Gerar uma copia', icon: PlusCircle },
+    { key: 'copy', label: 'Gerar uma copia', icon: PlusCircle, disabled: !canUseSystem.value },
     { key: 'profile', label: 'Ver perfil do criador', icon: UserPlus, disabled: !data.value?.system.createdBy?.id }
   ]
 }
@@ -204,6 +206,28 @@ async function sendComment() {
   }
 }
 
+
+function changeLine(change: { operation?: string, value?: unknown, targetLabel?: string | null, targetKey?: string | null, note?: string | null, type?: string | null }) {
+  if (change.operation === 'NOTE') return change.note?.trim() || ''
+  if (change.type === 'ATTRIBUTE_POINT') {
+    const amount = Number(change.value || 1)
+    return `${amount} ponto(s) livres de atributo${change.note ? ` - ${change.note}` : ''}`
+  }
+
+  const value = Number(change.value ?? 0)
+  const target = change.targetLabel || change.targetKey || 'alvo'
+  const operation = change.operation === 'SUBTRACT'
+    ? `-${Math.abs(value)}`
+    : change.operation === 'SET'
+      ? `define ${value}`
+      : value > 0
+        ? `+${value}`
+        : `${value}`
+
+  if (!value && change.operation !== 'SET') return change.note?.trim() || ''
+  return `${operation} em ${target}${change.note ? ` - ${change.note}` : ''}`
+}
+
 function categoryLabel(category: string) {
   const labels: Record<string, string> = {
     ATTRIBUTE: 'Atributos',
@@ -247,6 +271,9 @@ function categoryLabel(category: string) {
           <p v-if="isRejected" class="mt-3 rounded-lg border border-flare/35 bg-flare/10 p-3 text-sm font-bold text-red-100">
             Este sistema foi rejeitado e esta bloqueado para edicao. {{ data.system.moderationReason ? `Motivo: ${data.system.moderationReason}` : 'Crie uma nova versao para enviar novamente.' }}
           </p>
+          <p v-if="isPending" class="mt-3 rounded-lg border border-amber-300/30 bg-amber-300/10 p-3 text-sm font-bold text-amber-100">
+            Este sistema ainda esta em analise. Voce pode editar ou apagar, mas nao pode usar em salas, destacar, postar novamente ou criar personagem ate ser aprovado.
+          </p>
           <p class="mt-3 text-sm text-mist">Criador original: <b class="text-white">{{ originalCreator }}</b></p>
           <p v-if="!isOwner" class="mt-1 text-xs text-mist">Adicionar ao inventario cria uma copia privada sem alterar a autoria original.</p>
           <div class="mt-4 flex flex-wrap gap-2">
@@ -266,10 +293,11 @@ function categoryLabel(category: string) {
           </div>
         </div>
         <div class="flex gap-2">
-          <AppButton v-if="!isOwner" variant="ghost" :loading="adding" @click="addToInventory">
+          <AppButton v-if="!isOwner" variant="ghost" :loading="adding" :disabled="!canUseSystem" @click="addToInventory">
             <PlusCircle class="h-4 w-4" />Adicionar ao inventario
           </AppButton>
-          <NuxtLink :to="`/app/characters/new?systemId=${data.system.id}`"><AppButton><UserPlus class="h-4 w-4" />Criar personagem</AppButton></NuxtLink>
+          <NuxtLink v-if="canUseSystem" :to="`/app/characters/new?systemId=${data.system.id}`"><AppButton><UserPlus class="h-4 w-4" />Criar personagem</AppButton></NuxtLink>
+          <AppButton v-else disabled><UserPlus class="h-4 w-4" />Aguardando aprovacao</AppButton>
           <AppActionMenu v-if="isOwner" title="Acoes do sistema" :items="ownerActions()" @select="handleOwnerAction" />
           <AppActionMenu v-else title="Acoes do sistema" :items="visitorActions()" @select="handleVisitorAction" />
         </div>
@@ -290,7 +318,7 @@ function categoryLabel(category: string) {
             <div v-for="level in rpgClass.levels.filter((item) => item.changes.length)" :key="level.level" class="rounded border border-white/10 bg-panel/60 p-2">
               <b class="text-ember">Nivel {{ level.level }}</b>
               <p v-for="(change, index) in level.changes" :key="index" class="text-mist">
-                {{ change.operation === 'ADD' ? '+' : '=' }}{{ change.value }} em {{ change.targetLabel || change.targetKey }}{{ change.note ? ` - ${change.note}` : '' }}
+                {{ changeLine(change) }}
               </p>
             </div>
           </div>
@@ -311,7 +339,7 @@ function categoryLabel(category: string) {
     <ConfirmModal
       :open="confirmDeleteOpen"
       title="Apagar sistema"
-      :message="`Apagar ${data.system.name} tambem remove personagens e salas ligados a ele.`"
+      :message="`Apagar ${data.system.name} remove o sistema do inventario e encerra salas ligadas a ele. Personagens existentes serao preservados com um snapshot do sistema.`"
       confirm-label="Apagar"
       :loading="deleting"
       @close="confirmDeleteOpen = false"
@@ -328,3 +356,4 @@ function categoryLabel(category: string) {
     />
   </div>
 </template>
+

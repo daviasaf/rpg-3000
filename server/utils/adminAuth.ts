@@ -48,3 +48,4 @@ export async function requireAdmin(event: H3Event) {
     throw createError({ statusCode: 401, statusMessage: 'Sessao admin expirada.' })
   }
 }
+

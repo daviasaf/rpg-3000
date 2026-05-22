@@ -17,3 +17,4 @@ export default defineEventHandler(async (event) => {
   await prisma.profileComment.delete({ where: { id } })
   return { ok: true }
 })
+

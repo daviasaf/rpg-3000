@@ -9,3 +9,4 @@ export default defineEventHandler(async (event) => {
     statusMessage: 'Perfis exibem informacoes, criacoes e comentarios recebidos. Postagens no proprio perfil foram removidas.'
   })
 })
+

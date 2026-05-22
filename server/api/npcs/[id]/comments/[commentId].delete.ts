@@ -13,3 +13,4 @@ export default defineEventHandler(async (event) => {
   await prisma.npcComment.delete({ where: { id } })
   return { ok: true }
 })
+

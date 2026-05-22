@@ -33,3 +33,4 @@ export function parseAndRollDice(expression: string, mode = 'NORMAL'): DiceResul
     mode: 'NORMAL'
   }
 }
+

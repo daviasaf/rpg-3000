@@ -12,6 +12,7 @@ export default defineEventHandler(async (event) => {
 
   if (!system) throw createError({ statusCode: 404, statusMessage: 'Sistema nao encontrado.' })
   if (system.createdById !== user.id) throw createError({ statusCode: 403, statusMessage: 'Voce so pode publicar seus sistemas.' })
+  if (system.moderationStatus === 'PENDING') throw createError({ statusCode: 403, statusMessage: 'Este conteudo ainda esta em analise. Voce pode editar ou apagar, mas nao pode publicar novamente ate ser aprovado.' })
   if (system.moderationStatus === 'REJECTED') throw createError({ statusCode: 403, statusMessage: 'Sistema rejeitado nao pode ser republicado por edicao. Crie uma nova versao.' })
   const provenance = (system.schemaJson as Record<string, any>)?.provenance
   if (provenance?.originalCreatorId && provenance.originalCreatorId !== user.id) {
@@ -29,3 +30,4 @@ export default defineEventHandler(async (event) => {
   const post = await publishSystemSnapshot(id, user.id)
   return { post }
 })
+

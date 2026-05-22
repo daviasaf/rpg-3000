@@ -42,6 +42,53 @@ export type FieldCategory =
   | 'FORMULA'
   | 'ROLL_RULE'
 
+export type RuleEffectTargetType =
+  | 'ATTRIBUTE'
+  | 'ATTRIBUTE_POINT'
+  | 'RESOURCE'
+  | 'SKILL'
+  | 'ITEM'
+  | 'WEAPON'
+  | 'TRAIT'
+  | 'POWER'
+  | 'CONDITION'
+  | 'DAMAGE_RECEIVED'
+  | 'ROLL'
+  | 'TEXT'
+  | 'CUSTOM'
+
+export type RuleEffectOperation = 'ADD' | 'SUBTRACT' | 'SET' | 'MULTIPLY' | 'HALVE' | 'CHOICE' | 'NOTE'
+
+export interface RuleEffect {
+  id?: string
+  type: RuleEffectTargetType
+  targetKey?: string
+  targetLabel?: string
+  operation: RuleEffectOperation
+  value?: number | string | null
+  perPoint?: boolean
+  choiceCount?: number
+  condition?: string
+  note?: string
+  source?: string
+}
+
+export interface RuleTable {
+  id?: string
+  title?: string
+  headers: string[]
+  rows: string[][]
+}
+
+export interface RecordLevelRule {
+  id?: string
+  level: number
+  name?: string
+  description?: string
+  effects?: RuleEffect[]
+  tables?: RuleTable[]
+}
+
 export interface DynamicField {
   id?: string
   key: string
@@ -65,6 +112,7 @@ export interface SheetTabField {
   placeholder?: string
   helpText?: string
   order?: number
+  tables?: RuleTable[]
 }
 
 export interface SheetTabRecord {
@@ -75,7 +123,7 @@ export interface SheetTabRecord {
   text?: string
   value?: number | string
   min?: number | null
-  max?: number | null
+  max?: number | string | null
   relatedAttribute?: string
   damage?: string
   weight?: number | null
@@ -91,6 +139,9 @@ export interface SheetTabRecord {
   extraFields?: Array<{ id?: string; name: string; value: string }>
   useSkillLevels?: boolean
   skillLevels?: SkillLevelOption[]
+  effects?: RuleEffect[]
+  levels?: RecordLevelRule[]
+  tables?: RuleTable[]
 }
 
 export interface SkillLevelOption {
@@ -119,6 +170,7 @@ export interface SheetTab {
   fields?: SheetTabField[]
   records?: SheetTabRecord[]
   systemMarkdown?: string
+  tables?: RuleTable[]
 }
 
 export interface SystemSchema {
@@ -127,6 +179,8 @@ export interface SystemSchema {
   notes?: string
   categories?: string[]
   rulesMarkdown?: string
+  version?: string
+  provenance?: Record<string, unknown>
   sheetSections?: Array<{
     id?: string
     key: string
@@ -161,6 +215,7 @@ export interface SystemSchema {
     attributeLimitIncreasePerLevel?: number
     maxAttributeLimit?: number
     levelOneAttributePoints?: number
+    initialLevel?: number
   }
   classes?: SystemClass[]
 }
@@ -178,15 +233,19 @@ export interface SystemLevelRule {
   inventoryCapacity?: number
   resourceGains?: Array<{ key: string; value: number; note?: string }>
   bonusGains?: Array<{ name: string; key?: string; value: number; note?: string }>
+  effects?: RuleEffect[]
+  tables?: RuleTable[]
   notes?: string
 }
 
 export interface SystemClassLevelChange {
   targetKey?: string
   targetLabel?: string
-  operation: 'ADD' | 'SET' | 'NOTE'
+  operation: 'ADD' | 'SUBTRACT' | 'SET' | 'NOTE'
   value?: number
   note?: string
+  type?: RuleEffectTargetType
+  choiceCount?: number
 }
 
 export interface SystemClassLevel {
@@ -197,6 +256,7 @@ export interface SystemClassLevel {
   traitChoices?: number
   itemChoices?: number
   weaponChoices?: number
+  attributePoints?: number
   inventoryCapacity?: number
   changes: SystemClassLevelChange[]
 }

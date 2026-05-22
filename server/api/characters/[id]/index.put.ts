@@ -35,6 +35,8 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  const hasApprovedCommunityPost = await prisma.communityPost.count({ where: { originalCharacterId: id, status: 'APPROVED' } })
+
   const updated = await prisma.$transaction(async (tx) => {
     if (dataJson) {
       await tx.characterFieldValue.deleteMany({ where: { characterId: id } })
@@ -47,6 +49,9 @@ export default defineEventHandler(async (event) => {
         description: input.description,
         avatarUrl: input.avatarUrl === '' ? null : input.avatarUrl,
         systemId: input.systemId,
+        moderationStatus: hasApprovedCommunityPost ? 'PENDING' : undefined,
+        moderationReason: hasApprovedCommunityPost ? null : undefined,
+        featuredOnProfile: hasApprovedCommunityPost ? false : undefined,
         dataJson: dataJson ? jsonValue(dataJson) : undefined,
         values: dataJson
           ? {
@@ -64,3 +69,4 @@ export default defineEventHandler(async (event) => {
 
   return { character: updated }
 })
+

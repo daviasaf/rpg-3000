@@ -8,3 +8,4 @@ export default defineEventHandler(async (event) => {
   await prisma.npc.delete({ where: { id } })
   return { ok: true }
 })
+

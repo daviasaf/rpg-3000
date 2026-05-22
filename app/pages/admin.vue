@@ -635,3 +635,4 @@ function showChartLabel(index: number, total?: number) {
     />
   </main>
 </template>
+

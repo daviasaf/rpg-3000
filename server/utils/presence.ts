@@ -51,3 +51,4 @@ export function activePresenceForRoom(roomId: string) {
       lastSeen: new Date(entry.lastSeen).toISOString()
     }))
 }
+

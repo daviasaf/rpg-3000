@@ -45,3 +45,4 @@ const visibleVariables = computed(() => {
     </div>
   </div>
 </template>
+

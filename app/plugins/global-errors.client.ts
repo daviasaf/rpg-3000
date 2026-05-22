@@ -10,3 +10,4 @@ export default defineNuxtPlugin(() => {
     apiError(event.error || event.message, 'Erro inesperado na interface.')
   })
 })
+

@@ -30,3 +30,4 @@ const { data } = await useFetch<{ systems: Array<{
     </EmptyState>
   </div>
 </template>
+

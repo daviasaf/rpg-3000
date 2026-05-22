@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Copy, FileText, GripVertical, Plus, SlidersHorizontal, Trash2, X } from 'lucide-vue-next'
-import type { DynamicField, SheetFieldType, SheetTab, SheetTabField, SheetTabRecord, SheetTabType, SystemClass, SystemClassLevel, SystemClassLevelChange, SystemSchema } from '../../shared/types/system'
-import { createSheetTab, fieldsFromSheetTabs, formulaKeyFromLabel, keyFromLabel, normalizeSheetTabs, sheetFieldTypeLabels, sheetTabTypeLabels, uid } from '~~/shared/utils/sheetTabs'
+import { Copy, FileText, GripVertical, Plus, SlidersHorizontal, Table2, Trash2, X } from 'lucide-vue-next'
+import type { DynamicField, RecordLevelRule, RuleEffect, RuleTable, SheetFieldType, SheetTab, SheetTabField, SheetTabRecord, SheetTabType, SystemClass, SystemClassLevel, SystemClassLevelChange, SystemLevelRule, SystemSchema } from '../../shared/types/system'
+import { createEmptyRuleTable, createRuleEffect, createSheetTab, fieldsFromSheetTabs, formulaKeyFromLabel, keyFromLabel, normalizeSheetTabs, sheetFieldTypeLabels, sheetTabTypeLabels, uid } from '~~/shared/utils/sheetTabs'
 import { formulaVariableList } from '~~/shared/utils/characterRules'
 
 const fields = defineModel<DynamicField[]>('fields', { required: true })
@@ -16,7 +16,7 @@ const tabs = computed({
 })
 
 const tabTypes: SheetTabType[] = ['ATTRIBUTES', 'RESOURCES', 'SKILLS', 'CLASS_PROGRESS', 'ITEMS', 'WEAPONS', 'TRAITS', 'POWERS', 'TEXT_BLOCKS', 'CONDITIONS', 'RULES', 'ROLLS', 'CUSTOM']
-const fieldTypes: SheetFieldType[] = ['SHORT_TEXT', 'LONG_TEXT', 'NUMBER', 'CHECKBOX', 'SELECT', 'LIST', 'DAMAGE', 'ROLL', 'COST', 'RANGE', 'BONUS', 'IMAGE', 'TAGS']
+const fieldTypes: SheetFieldType[] = ['SHORT_TEXT', 'LONG_TEXT', 'NUMBER', 'CHECKBOX', 'SELECT', 'LIST', 'DAMAGE', 'ROLL', 'COST', 'RANGE', 'IMAGE', 'TAGS']
 const activeTabId = ref('')
 const createOpen = ref(false)
 const pendingDeleteTab = ref<SheetTab | null>(null)
@@ -30,19 +30,22 @@ const newTabName = ref('')
 if (!schema.value.leveling) {
   schema.value.leveling = {
     levelOneAttributePoints: 6,
+    initialLevel: 0,
     attributesPerLevel: 1,
     levelOneAttributeLimit: 5,
     attributeLimitIncreasePerLevel: 1,
     maxAttributeLimit: 20
   }
 }
-schema.value.levelProgression ||= [{ id: uid('level_rule'), level: 1, attributeBudget: 6, attributePoints: 5, skillChoices: 0, powerChoices: 0, traitChoices: 0, itemChoices: 0, weaponChoices: 0, inventoryCapacity: 0, notes: '' }]
+schema.value.levelProgression ||= [{ id: uid('level_rule'), level: 0, attributeBudget: 6, attributePoints: 5, skillChoices: 0, powerChoices: 0, traitChoices: 0, itemChoices: 0, weaponChoices: 0, inventoryCapacity: 0, effects: [], tables: [], notes: 'Base inicial do personagem.' }]
 schema.value.levelProgression = schema.value.levelProgression.map((rule, index) => ({
   ...rule,
   id: rule.id || uid('level_rule'),
-  level: Number(rule.level || index + 1),
+  level: Number(rule.level ?? index),
   attributeBudget: Number(rule.attributeBudget ?? rule.attributePoints ?? (index === 0 ? 6 : index + 6)),
-  attributePoints: Number(rule.attributePoints ?? (index === 0 ? 5 : index + 5))
+  attributePoints: Number(rule.attributePoints ?? (index === 0 ? 5 : index + 5)),
+  effects: rule.effects || [],
+  tables: rule.tables || []
 }))
 
 schema.value.sheetTabs = normalizeSheetTabs(schema.value)
@@ -66,19 +69,61 @@ const progressCapabilities = computed(() => {
     classes: hasTab(['CLASS_PROGRESS']) || Boolean(schema.value.classes?.length)
   }
 })
-const classTargets = computed(() => {
-  const fromTabs = tabs.value
-    .filter((tab) => ['ATTRIBUTES', 'RESOURCES', 'SKILLS'].includes(tab.type))
-    .flatMap((tab) => (tab.records || []).map((record) => ({
-      key: keyFromLabel(`${tab.key}_${record.name}`),
-      label: record.name,
-      category: tab.type === 'ATTRIBUTES' ? 'ATTRIBUTE' : tab.type === 'RESOURCES' ? 'RESOURCE' : 'SKILL'
-    })))
-  const fromFields = fields.value
-    .filter((field) => field.type === 'NUMBER' && ['ATTRIBUTE', 'SKILL', 'RESOURCE', 'STATUS_BAR', 'NUMERIC_FIELD'].includes(field.category))
-    .map((field) => ({ key: field.key, label: field.label, category: field.category }))
+
+type EffectTarget = { key: string; label: string; type: RuleEffect['type'] }
+const effectTargets = computed<EffectTarget[]>(() => {
+  const targets: EffectTarget[] = [{ key: 'DANO_RECEBIDO', label: 'Dano recebido', type: 'DAMAGE_RECEIVED' }]
+  if (progressCapabilities.value.attributes) {
+    targets.push({ key: 'ATTRIBUTE_POINT', label: 'Ponto livre de atributo', type: 'ATTRIBUTE_POINT' })
+  }
+  for (const tab of tabs.value) {
+    for (const record of tab.records || []) {
+      const key = formulaKeyFromLabel(record.key || record.name)
+      const type = effectTypeForTab(tab.type)
+      if (type) targets.push({ key, label: `${record.name} (${tab.name})`, type })
+    }
+  }
+  for (const field of fields.value) {
+    targets.push({ key: formulaKeyFromLabel(field.key), label: field.label, type: field.category === 'ATTRIBUTE' ? 'ATTRIBUTE' : field.category === 'SKILL' ? 'SKILL' : field.category === 'RESOURCE' || field.category === 'STATUS_BAR' ? 'RESOURCE' : 'CUSTOM' })
+  }
   const seen = new Set<string>()
-  return [...fromTabs, ...fromFields].filter((field) => {
+  return targets.filter((target) => {
+    const fingerprint = `${target.type}:${target.key}`
+    if (seen.has(fingerprint)) return false
+    seen.add(fingerprint)
+    return true
+  })
+})
+
+function effectTypeForTab(type: SheetTabType): RuleEffect['type'] | null {
+  if (type === 'ATTRIBUTES') return 'ATTRIBUTE'
+  if (type === 'RESOURCES') return 'RESOURCE'
+  if (type === 'SKILLS') return 'SKILL'
+  if (type === 'ITEMS') return 'ITEM'
+  if (type === 'WEAPONS') return 'WEAPON'
+  if (type === 'TRAITS') return 'TRAIT'
+  if (type === 'POWERS') return 'POWER'
+  if (type === 'CONDITIONS') return 'CONDITION'
+  if (type === 'ROLLS') return 'ROLL'
+  if (type === 'CUSTOM') return 'CUSTOM'
+  return null
+}
+
+const effectOperations: Array<{ value: RuleEffect['operation']; label: string }> = [
+  { value: 'ADD', label: 'Somar' },
+  { value: 'SUBTRACT', label: 'Subtrair' },
+  { value: 'SET', label: 'Definir' },
+  { value: 'MULTIPLY', label: 'Multiplicar' },
+  { value: 'HALVE', label: 'Metade' },
+  { value: 'CHOICE', label: 'Escolha do jogador' },
+  { value: 'NOTE', label: 'Texto' }
+]
+const classTargets = computed(() => {
+  const fromEffects = effectTargets.value
+    .filter((target) => !['ITEM', 'WEAPON', 'TRAIT', 'POWER', 'CONDITION'].includes(target.type))
+    .map((target) => ({ key: target.key, label: target.label, category: target.type }))
+  const seen = new Set<string>()
+  return fromEffects.filter((field) => {
     if (seen.has(field.key)) return false
     seen.add(field.key)
     return true
@@ -121,6 +166,7 @@ function actionItems(tab: SheetTab) {
   const index = tabs.value.findIndex((item) => item.id === tab.id)
   return [
     { key: 'advanced', label: advancedTabId.value === tab.id ? 'Ocultar avancado' : 'Configuracoes avancadas', icon: SlidersHorizontal },
+    { key: 'table', label: 'Adicionar tabela', icon: Table2 },
     { key: 'up', label: 'Mover para cima', icon: GripVertical, disabled: index <= 0 },
     { key: 'down', label: 'Mover para baixo', icon: GripVertical, disabled: index === tabs.value.length - 1 },
     { key: 'duplicate', label: 'Duplicar', icon: Copy },
@@ -144,6 +190,11 @@ function handleAction(tab: SheetTab, action: string) {
     next[target] = current
     tabs.value = next
   }
+  if (action === 'table') {
+    tab.tables ||= []
+    tab.tables.push(createEmptyRuleTable())
+    advancedTabId.value = tab.id || ''
+  }
   if (action === 'duplicate') {
     const clone = structuredClone(tab)
     clone.id = uid('sheet_tab')
@@ -163,6 +214,9 @@ function handleAction(tab: SheetTab, action: string) {
 function recordActionItems(record: SheetTabRecord) {
   return [
     { key: 'advanced', label: advancedRecordId.value === record.id ? 'Ocultar avancado' : 'Configuracoes avancadas', icon: SlidersHorizontal },
+    { key: 'effect', label: 'Adicionar modificacao', icon: SlidersHorizontal },
+    { key: 'level', label: 'Adicionar nivel', icon: Plus },
+    { key: 'table', label: 'Adicionar tabela', icon: Table2 },
     { key: 'duplicate', label: 'Duplicar', icon: Copy },
     { key: 'delete', label: 'Apagar registro', icon: Trash2, danger: true }
   ]
@@ -171,6 +225,19 @@ function recordActionItems(record: SheetTabRecord) {
 function handleRecordAction(tab: SheetTab, record: SheetTabRecord, index: number, action: string) {
   if (action === 'advanced') {
     advancedRecordId.value = advancedRecordId.value === record.id ? '' : record.id || ''
+  }
+  if (action === 'effect') {
+    addEffect(record)
+    advancedRecordId.value = record.id || ''
+  }
+  if (action === 'level') {
+    addRecordLevel(record)
+    advancedRecordId.value = record.id || ''
+  }
+  if (action === 'table') {
+    record.tables ||= []
+    record.tables.push(createEmptyRuleTable())
+    advancedRecordId.value = record.id || ''
   }
   if (action === 'duplicate') {
     tab.records ||= []
@@ -223,7 +290,7 @@ function addRecord(tab: SheetTab) {
     ability: '',
     bonus: '',
     effect: '',
-    quantity: null,
+    quantity: tab.type === 'ITEMS' ? 1 : null,
     fields: {},
     useSkillLevels: false,
     skillLevels: []
@@ -263,10 +330,11 @@ function copyKey(key?: string) {
 function addSkillLevel(record: SheetTabRecord) {
   record.skillLevels ||= []
   const nextIndex = record.skillLevels.length + 1
+  const name = `Nivel ${nextIndex}`
   record.skillLevels.push({
     id: uid('skill_level'),
-    name: `Nivel ${nextIndex}`,
-    key: formulaKeyFromLabel(`NIVEL_${nextIndex}`),
+    name,
+    key: formulaKeyFromLabel(name),
     value: 0
   })
 }
@@ -281,7 +349,7 @@ function syncSkillLevelKey(level: NonNullable<SheetTabRecord['skillLevels']>[num
 
 function addLevelRule() {
   schema.value.levelProgression ||= []
-  const nextLevel = Math.max(0, ...schema.value.levelProgression.map((item) => Number(item.level || 0))) + 1
+  const nextLevel = Math.max(0, ...schema.value.levelProgression.map((item) => Number(item.level ?? 0))) + 1
   const previous = schema.value.levelProgression[schema.value.levelProgression.length - 1] || schema.value.levelProgression[0]
   schema.value.levelProgression.push({
     id: uid('level_rule'),
@@ -294,7 +362,9 @@ function addLevelRule() {
     itemChoices: 0,
     weaponChoices: 0,
     inventoryCapacity: Number(previous?.inventoryCapacity ?? 0),
-    notes: previous?.notes || ''
+    effects: [],
+    tables: [],
+    notes: ''
   })
 }
 
@@ -358,9 +428,9 @@ function removeClass(index: number) {
 }
 
 function createLevels(maxLevel: number, previous: SystemClassLevel[] = []) {
-  return Array.from({ length: Math.max(1, Number(maxLevel || 1)) }, (_, index) => {
-    const level = index + 1
-    return previous.find((item) => item.level === level) || { level, description: '', changes: [] }
+  return Array.from({ length: Math.max(1, Number(maxLevel || 1)) + 1 }, (_, index) => {
+    const level = index
+    return previous.find((item) => item.level === level) || { level, description: level === 0 ? 'Base inicial da classe.' : '', changes: [] }
   })
 }
 
@@ -370,9 +440,14 @@ function resizeClassLevels(rpgClass: SystemClass) {
 }
 
 function addLevelChange(level: SystemClassLevel) {
-  const target = classTargets.value[0]
+  const target = classTargets.value.find((item) => item.key !== 'ATTRIBUTE_POINT') || classTargets.value[0]
   if (!target) return
-  level.changes.push({ targetKey: target.key, targetLabel: target.label, operation: 'ADD', value: 1, note: '' })
+  level.changes.push({ targetKey: target.key, targetLabel: target.label, operation: 'ADD', value: 1, note: '', type: target.category as RuleEffect['type'] })
+}
+
+function addAttributePoint(level: SystemClassLevel) {
+  if (!progressCapabilities.value.attributes) return
+  level.changes.push({ targetKey: 'ATTRIBUTE_POINT', targetLabel: 'Ponto livre de atributo', operation: 'ADD', value: 1, note: 'Ponto livre para distribuir em qualquer atributo permitido.', type: 'ATTRIBUTE_POINT', choiceCount: 1 })
 }
 
 function addLevelText(level: SystemClassLevel) {
@@ -382,12 +457,14 @@ function addLevelText(level: SystemClassLevel) {
 function levelActionItems() {
   return [
     { key: 'text', label: 'Texto', icon: FileText },
+    ...(progressCapabilities.value.attributes ? [{ key: 'attributePoint', label: 'Ponto livre de atributo', icon: Plus }] : []),
     { key: 'change', label: 'Alteracao', icon: SlidersHorizontal, disabled: classTargets.value.length === 0 }
   ]
 }
 
 function handleLevelAction(level: SystemClassLevel, action: string) {
   if (action === 'text') addLevelText(level)
+  if (action === 'attributePoint') addAttributePoint(level)
   if (action === 'change') addLevelChange(level)
 }
 
@@ -399,6 +476,83 @@ function syncTargetLabel(change: SystemClassLevelChange) {
   if (!change.targetKey) return
   const target = classTargets.value.find((field) => field.key === change.targetKey)
   change.targetLabel = target?.label || change.targetKey
+  change.type = target?.category as RuleEffect['type'] || 'CUSTOM'
+  if (change.type === 'ATTRIBUTE_POINT') {
+    change.targetLabel = 'Ponto livre de atributo'
+    change.operation = 'ADD'
+    change.value = Number(change.value || change.choiceCount || 1)
+    change.choiceCount = Number(change.choiceCount || change.value || 1)
+  }
+}
+
+function addEffect(target: SheetTabRecord | SystemLevelRule | RecordLevelRule) {
+  const option = effectTargets.value[0]
+  target.effects ||= []
+  target.effects.push(createRuleEffect(option?.type || 'TEXT', option ? { key: option.key, label: option.label } : undefined))
+}
+
+function addRecordLevel(record: SheetTabRecord) {
+  record.levels ||= []
+  const nextLevel = Math.max(0, ...record.levels.map((item) => Number(item.level ?? 0))) + 1
+  record.levels.push({ id: uid('record_level'), level: nextLevel, name: `Nivel ${nextLevel}`, description: '', effects: [], tables: [] })
+}
+
+function removeEffect(list: RuleEffect[] | undefined, index: number) {
+  list?.splice(index, 1)
+}
+
+function syncEffectTarget(effect: RuleEffect) {
+  const target = effectTargets.value.find((item) => item.key === effect.targetKey)
+  if (!target) return
+  effect.type = target.type
+  effect.targetLabel = target.label
+  if (target.type === 'ATTRIBUTE_POINT') {
+    effect.operation = 'CHOICE'
+    effect.choiceCount = Number(effect.choiceCount || effect.value || 1)
+  }
+}
+
+function addTableRow(table: RuleTable) {
+  const width = Math.max(1, table.headers?.length || table.rows?.[0]?.length || 2)
+  table.rows.push(Array.from({ length: width }, () => ''))
+}
+
+function removeTableRow(table: RuleTable, index: number) {
+  table.rows.splice(index, 1)
+}
+
+function addTableColumn(table: RuleTable) {
+  table.headers ||= []
+  table.headers.push(`Coluna ${table.headers.length + 1}`)
+  for (const row of table.rows) row.push('')
+}
+
+function removeTableColumn(table: RuleTable, index: number) {
+  table.headers?.splice(index, 1)
+  for (const row of table.rows) row.splice(index, 1)
+}
+
+function removeTable(tables: RuleTable[] | undefined, index: number) {
+  tables?.splice(index, 1)
+}
+
+function operationLabel(operation: RuleEffect['operation'] | SystemClassLevelChange['operation']) {
+  const labels: Record<string, string> = {
+    ADD: 'soma',
+    SUBTRACT: 'subtrai',
+    SET: 'define',
+    MULTIPLY: 'multiplica',
+    HALVE: 'reduz pela metade',
+    CHOICE: 'permite escolher',
+    NOTE: 'texto'
+  }
+  return labels[operation] || String(operation || '').toLowerCase()
+}
+
+function effectSummary(effect: RuleEffect) {
+  if (effect.type === 'ATTRIBUTE_POINT') return `${effect.choiceCount || effect.value || 1} ponto(s) livre(s) de atributo para distribuir`
+  if (effect.operation === 'NOTE') return effect.note || 'Texto informativo'
+  return `${effect.targetLabel || effect.targetKey || 'Alvo'}: ${operationLabel(effect.operation)} ${effect.value ?? ''}${effect.perPoint ? ' multiplicado pelo valor do alvo' : ''}`
 }
 
 function fieldValue(record: SheetTabRecord, key: string) {
@@ -476,19 +630,36 @@ function setFieldValue(record: SheetTabRecord, key: string, value: unknown) {
               <div class="mb-4 flex items-start justify-between gap-3 border-b border-white/10 pb-3">
                 <div>
                   <span class="text-[10px] font-black uppercase tracking-[0.14em] text-ember">Regra global</span>
-                  <h4 class="mt-1 font-black text-white">Nivel {{ levelRule.level || levelIndex + 1 }}</h4>
+                  <h4 class="mt-1 font-black text-white">Nivel {{ levelRule.level ?? levelIndex }}</h4>
                   <p class="mt-1 text-xs leading-5 text-mist">Pontos, limites e escolhas que todos os personagens seguem neste nivel.</p>
                 </div>
                 <AppActionMenu :items="levelRuleActionItems()" title="Acoes do nivel" @select="handleLevelRuleAction(levelIndex, $event)" />
               </div>
               <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-                <label><span class="label">Nivel</span><input v-model.number="levelRule.level" type="number" min="1" class="input"></label>
+                <label><span class="label">Nivel</span><input v-model.number="levelRule.level" type="number" min="0" class="input"></label>
                 <label v-if="progressCapabilities.attributes" class="xl:col-span-2"><span class="label">Pontos para usar no nivel</span><input v-model.number="levelRule.attributeBudget" type="number" min="0" class="input"></label>
                 <label v-if="progressCapabilities.attributes" class="xl:col-span-2"><span class="label">Pontos maximos por atributo</span><input v-model.number="levelRule.attributePoints" type="number" min="0" class="input"></label>
                 <label v-if="progressCapabilities.skills"><span class="label">Pericias por nivel</span><input v-model.number="levelRule.skillChoices" type="number" min="0" class="input"></label>
                 <label v-if="progressCapabilities.powers"><span class="label">Poderes por nivel</span><input v-model.number="levelRule.powerChoices" type="number" min="0" class="input"></label>
                 <label v-if="progressCapabilities.equipment"><span class="label">Capacidade de peso</span><input v-model.number="levelRule.inventoryCapacity" type="number" min="0" class="input"></label>
                 <label class="md:col-span-2 xl:col-span-5"><span class="label">Regra textual</span><textarea v-model="levelRule.notes" rows="2" class="input" /></label>
+                <div class="md:col-span-2 xl:col-span-5 space-y-2 rounded-lg border border-white/10 bg-panel/60 p-3">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p class="text-sm font-black text-white">Efeitos deste nivel</p>
+                      <p class="text-xs text-mist">Use o + para adicionar ganhos vindos das abas existentes do sistema.</p>
+                    </div>
+                    <AppButton type="button" variant="ghost" @click="addEffect(levelRule)"><Plus class="h-4 w-4" />Efeito</AppButton>
+                  </div>
+                  <div v-for="(effect, effectIndex) in levelRule.effects || []" :key="effect.id || effectIndex" class="grid gap-2 rounded-lg border border-white/10 bg-white/[0.035] p-2 lg:grid-cols-[1.2fr_130px_120px_1fr_auto]">
+                    <label><span class="label">Alvo</span><select v-model="effect.targetKey" class="select" @change="syncEffectTarget(effect)"><option v-for="target in effectTargets" :key="`${target.type}:${target.key}`" :value="target.key">{{ target.label }}</option></select></label>
+                    <label><span class="label">Regra</span><select v-model="effect.operation" class="select"><option v-for="operation in effectOperations" :key="operation.value" :value="operation.value">{{ operation.label }}</option></select></label>
+                    <label><span class="label">Valor</span><FormulaTextInput v-model="effect.value" :variables="formulaVariables" placeholder="5 + FORCA" /></label>
+                    <label><span class="label">Nota</span><input v-model="effect.note" class="input" placeholder="Origem mostrada na ficha"></label>
+                    <AppActionMenu class="self-end" :items="[{ key: 'delete', label: 'Apagar efeito', icon: Trash2, danger: true }]" title="Acoes do efeito" @select="$event === 'delete' && removeEffect(levelRule.effects, effectIndex)" />
+                    <label class="flex items-center gap-2 text-xs font-bold text-mist lg:col-span-5"><input v-model="effect.perPoint" type="checkbox" class="accent-[var(--user-accent)]">Multiplicar pelo valor atual do alvo. Use quando cada ponto do alvo gerar este efeito.</label>
+                  </div>
+                </div>
               </div>
             </div>
             <EmptyState
@@ -529,11 +700,10 @@ function setFieldValue(record: SheetTabRecord, key: string, value: unknown) {
             </label>
           </div>
 
-          <div class="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="activeTab.readonly" type="checkbox" class="accent-[var(--user-accent)]">Somente leitura</label>
-            <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="activeTab.allowRolls" type="checkbox" class="accent-[var(--user-accent)]">Rolagens</label>
-            <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="activeTab.allowBonuses" type="checkbox" class="accent-[var(--user-accent)]">Bonus/aumentos</label>
-            <label class="soft-row flex items-center gap-2 p-3 text-sm font-bold text-white"><input v-model="activeTab.allowDamageCostAbility" type="checkbox" class="accent-[var(--user-accent)]">Dano/custo/habilidade</label>
+          <div class="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <label class="soft-row flex items-start gap-2 p-3 text-sm font-bold text-white"><input v-model="activeTab.readonly" type="checkbox" class="mt-1 accent-[var(--user-accent)]"><span><span class="block">Somente leitura</span><span class="block text-xs font-medium text-mist">Use para regras e informacoes que o jogador nao edita.</span></span></label>
+            <label class="soft-row flex items-start gap-2 p-3 text-sm font-bold text-white"><input v-model="activeTab.allowRolls" type="checkbox" class="mt-1 accent-[var(--user-accent)]"><span><span class="block">Rolagens</span><span class="block text-xs font-medium text-mist">Exibe campos de formula como 1d20 + ATRIBUTO.</span></span></label>
+            <label class="soft-row flex items-start gap-2 p-3 text-sm font-bold text-white"><input v-model="activeTab.allowDamageCostAbility" type="checkbox" class="mt-1 accent-[var(--user-accent)]"><span><span class="block">Dano, custo e habilidade</span><span class="block text-xs font-medium text-mist">Use para itens, armas, poderes e efeitos.</span></span></label>
           </div>
 
           <div v-if="advancedTabId === activeTab.id" class="mt-4 rounded-lg border border-white/10 bg-white/[0.04] p-3">
@@ -545,7 +715,22 @@ function setFieldValue(record: SheetTabRecord, key: string, value: unknown) {
               </label>
               <AppButton type="button" variant="ghost" class="self-end" @click="copyKey(activeTab.key)">Copiar chave</AppButton>
             </div>
-            <p class="mt-2 text-xs leading-5 text-mist">A chave da aba organiza os dados. As chaves de registros abaixo sao as usadas em rolagens, bonus e formulas.</p>
+            <p class="mt-2 text-xs leading-5 text-mist">A chave da aba organiza os dados. As chaves de registros abaixo sao as usadas em rolagens, modificacoes e formulas.</p>
+            <div v-if="activeTab.tables?.length" class="mt-4 space-y-3">
+              <div v-for="(table, tableIndex) in activeTab.tables" :key="table.id || tableIndex" class="rounded-lg border border-white/10 bg-white/[0.035] p-3">
+                <div class="flex items-center justify-between gap-2">
+                  <input v-model="table.title" class="input" placeholder="Titulo da tabela">
+                  <AppActionMenu :items="[{ key: 'delete', label: 'Apagar tabela', icon: Trash2, danger: true }]" title="Acoes da tabela" @select="$event === 'delete' && removeTable(activeTab.tables, tableIndex)" />
+                </div>
+                <div class="mt-3 overflow-x-auto">
+                  <table class="min-w-full text-sm">
+                    <thead><tr><th v-for="(_, columnIndex) in table.headers" :key="columnIndex" class="border border-white/10 p-1"><input v-model="table.headers[columnIndex]" class="input min-w-32"></th></tr></thead>
+                    <tbody><tr v-for="(row, rowIndex) in table.rows" :key="rowIndex"><td v-for="(_, columnIndex) in table.headers" :key="columnIndex" class="border border-white/10 p-1"><input v-model="row[columnIndex]" class="input min-w-32"></td><td class="p-1"><button type="button" class="text-xs font-bold text-red-200" @click="removeTableRow(table, rowIndex)">Remover</button></td></tr></tbody>
+                  </table>
+                </div>
+                <div class="mt-3 flex flex-wrap gap-2"><AppButton type="button" variant="ghost" @click="addTableRow(table)">Linha</AppButton><AppButton type="button" variant="ghost" @click="addTableColumn(table)">Coluna</AppButton><AppButton type="button" variant="subtle" @click="removeTableColumn(table, table.headers.length - 1)">Remover coluna</AppButton></div>
+              </div>
+            </div>
           </div>
         </AppCard>
 
@@ -559,14 +744,12 @@ function setFieldValue(record: SheetTabRecord, key: string, value: unknown) {
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 class="text-lg font-black text-white">Classes e progresso</h3>
-              <p class="muted mt-1">Reaproveita a logica de bonus por nivel ja usada pela ficha.</p>
+              <p class="muted mt-1">Configure textos, pontos livres e alteracoes aplicadas por nivel de classe.</p>
             </div>
-            <AppButton type="button" :disabled="classTargets.length === 0" @click="addClass"><Plus class="h-4 w-4" />Adicionar classe</AppButton>
+            <AppButton type="button" @click="addClass"><Plus class="h-4 w-4" />Adicionar classe</AppButton>
           </div>
 
-          <p v-if="classTargets.length === 0" class="mt-4 rounded-lg border border-dashed border-white/15 p-4 text-sm text-mist">Crie atributos, recursos ou pericias antes de configurar bonus por nivel.</p>
-
-          <div class="mt-5 space-y-4">
+                    <div class="mt-5 space-y-4">
             <div v-for="(rpgClass, classIndex) in classes" :key="rpgClass.id || classIndex" class="rounded-lg border border-white/10 bg-white/[0.04] p-4">
               <div class="grid gap-3 lg:grid-cols-[1fr_120px_auto]">
                 <label>
@@ -599,8 +782,8 @@ function setFieldValue(record: SheetTabRecord, key: string, value: unknown) {
                   <div class="mt-3 space-y-2">
                     <div v-for="(change, changeIndex) in level.changes" :key="changeIndex" class="grid gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-2" :class="change.operation === 'NOTE' ? 'lg:grid-cols-[1fr_auto]' : 'lg:grid-cols-[1fr_110px_110px_1fr_auto]'">
                       <label v-if="change.operation === 'NOTE'"><span class="label">Texto na ficha</span><textarea v-model="change.note" rows="2" class="input" /></label>
-                      <label v-else><span class="label">Alvo</span><select v-model="change.targetKey" class="select" @change="syncTargetLabel(change)"><option v-for="target in classTargets" :key="target.key" :value="target.key">{{ target.label }}</option></select></label>
-                      <label v-if="change.operation !== 'NOTE'"><span class="label">Regra</span><select v-model="change.operation" class="select"><option value="ADD">Somar</option><option value="SET">Definir</option><option value="NOTE">Texto</option></select></label>
+                      <label v-else><span class="label">Alvo</span><select v-model="change.targetKey" class="select" @change="syncTargetLabel(change)"><option v-for="target in classTargets" :key="`${target.category}:${target.key}`" :value="target.key">{{ target.label }}</option></select><span v-if="change.type === 'ATTRIBUTE_POINT'" class="mt-1 block text-xs text-mist">Ponto para o jogador distribuir em qualquer atributo permitido.</span></label>
+                      <label v-if="change.operation !== 'NOTE'"><span class="label">Regra</span><select v-model="change.operation" class="select"><option value="ADD">Somar</option><option value="SUBTRACT">Subtrair</option><option value="SET">Definir</option><option value="NOTE">Texto</option></select></label>
                       <label v-if="change.operation !== 'NOTE'"><span class="label">Valor</span><input v-model.number="change.value" type="number" class="input"></label>
                       <label v-if="change.operation !== 'NOTE'"><span class="label">Nota</span><input v-model="change.note" class="input"></label>
                       <AppActionMenu class="self-end" :items="[{ key: 'delete', label: 'Apagar alteracao', icon: Trash2, danger: true }]" title="Acoes da alteracao" @select="$event === 'delete' && removeLevelChange(level, changeIndex)" />
@@ -655,13 +838,41 @@ function setFieldValue(record: SheetTabRecord, key: string, value: unknown) {
                   </label>
                   <AppButton type="button" variant="ghost" class="self-end" @click="copyKey(record.key)">Copiar chave</AppButton>
                 </div>
-                <p class="mt-2 text-xs leading-5 text-mist">Use esta chave em rolagens e bonus, como: 1d20 + {{ record.key || 'POT' }}</p>
+                <p class="mt-2 text-xs leading-5 text-mist">Use esta chave em rolagens e formulas, como: 1d20 + {{ record.key || 'POT' }}.</p>
+                <div v-if="record.effects?.length" class="mt-4 space-y-2">
+                  <p class="text-xs font-black uppercase tracking-[0.12em] text-ember">Modificacoes do registro</p>
+                  <div v-for="(effect, effectIndex) in record.effects" :key="effect.id || effectIndex" class="grid gap-2 rounded-lg border border-white/10 bg-white/[0.035] p-2 lg:grid-cols-[1.2fr_130px_120px_1fr_auto]">
+                    <label><span class="label">Alvo</span><select v-model="effect.targetKey" class="select" @change="syncEffectTarget(effect)"><option v-for="target in effectTargets" :key="`${target.type}:${target.key}`" :value="target.key">{{ target.label }}</option></select></label>
+                    <label><span class="label">Regra</span><select v-model="effect.operation" class="select"><option v-for="operation in effectOperations" :key="operation.value" :value="operation.value">{{ operation.label }}</option></select></label>
+                    <label><span class="label">Valor</span><FormulaTextInput v-model="effect.value" :variables="formulaVariables" placeholder="5 + FORCA" /></label>
+                    <label><span class="label">Nota</span><input v-model="effect.note" class="input" placeholder="Enquanto equipado, escolhido etc."></label>
+                    <AppActionMenu class="self-end" :items="[{ key: 'delete', label: 'Apagar efeito', icon: Trash2, danger: true }]" title="Acoes do efeito" @select="$event === 'delete' && removeEffect(record.effects, effectIndex)" />
+                    <label class="flex items-center gap-2 text-xs font-bold text-mist lg:col-span-5"><input v-model="effect.perPoint" type="checkbox" class="accent-[var(--user-accent)]">Multiplicar pelo nivel/valor do registro. Ex.: Forca 2 com +5 gera +10.</label>
+                  </div>
+                </div>
+                <div v-if="record.levels?.length" class="mt-4 space-y-3">
+                  <p class="text-xs font-black uppercase tracking-[0.12em] text-ember">Niveis do registro</p>
+                  <div v-for="(recordLevel, recordLevelIndex) in record.levels" :key="recordLevel.id || recordLevelIndex" class="rounded-lg border border-white/10 bg-white/[0.035] p-3">
+                    <div class="grid gap-2 md:grid-cols-[100px_1fr_auto]"><label><span class="label">Nivel</span><input v-model.number="recordLevel.level" type="number" min="0" class="input"></label><label><span class="label">Nome</span><input v-model="recordLevel.name" class="input"></label><AppActionMenu class="self-end" :items="[{ key: 'delete', label: 'Apagar nivel', icon: Trash2, danger: true }]" title="Acoes do nivel" @select="$event === 'delete' && record.levels?.splice(recordLevelIndex, 1)" /></div>
+                    <label class="mt-2 block"><span class="label">Descricao Markdown</span><textarea v-model="recordLevel.description" rows="2" class="input" /></label>
+                    <div class="mt-2 flex justify-end"><AppButton type="button" variant="ghost" @click="addEffect(recordLevel)"><Plus class="h-4 w-4" />Efeito do nivel</AppButton></div>
+                    <div v-for="(effect, effectIndex) in recordLevel.effects || []" :key="effect.id || effectIndex" class="mt-2 grid gap-2 rounded-lg border border-white/10 bg-panel/70 p-2 md:grid-cols-[1fr_120px_100px_auto]"><select v-model="effect.targetKey" class="select" @change="syncEffectTarget(effect)"><option v-for="target in effectTargets" :key="`${target.type}:${target.key}`" :value="target.key">{{ target.label }}</option></select><select v-model="effect.operation" class="select"><option v-for="operation in effectOperations" :key="operation.value" :value="operation.value">{{ operation.label }}</option></select><input v-model="effect.value" class="input"><AppActionMenu :items="[{ key: 'delete', label: 'Apagar efeito', icon: Trash2, danger: true }]" title="Acoes do efeito" @select="$event === 'delete' && removeEffect(recordLevel.effects, effectIndex)" /></div>
+                  </div>
+                </div>
+                <div v-if="record.tables?.length" class="mt-4 space-y-3">
+                  <p class="text-xs font-black uppercase tracking-[0.12em] text-ember">Tabelas do registro</p>
+                  <div v-for="(table, tableIndex) in record.tables" :key="table.id || tableIndex" class="rounded-lg border border-white/10 bg-white/[0.035] p-3">
+                    <div class="flex items-center justify-between gap-2"><input v-model="table.title" class="input" placeholder="Titulo da tabela"><AppActionMenu :items="[{ key: 'delete', label: 'Apagar tabela', icon: Trash2, danger: true }]" title="Acoes da tabela" @select="$event === 'delete' && removeTable(record.tables, tableIndex)" /></div>
+                    <div class="mt-3 overflow-x-auto"><table class="min-w-full text-sm"><thead><tr><th v-for="(_, columnIndex) in table.headers" :key="columnIndex" class="border border-white/10 p-1"><input v-model="table.headers[columnIndex]" class="input min-w-32"></th></tr></thead><tbody><tr v-for="(row, rowIndex) in table.rows" :key="rowIndex"><td v-for="(_, columnIndex) in table.headers" :key="columnIndex" class="border border-white/10 p-1"><input v-model="row[columnIndex]" class="input min-w-32"></td><td class="p-1"><button type="button" class="text-xs font-bold text-red-200" @click="removeTableRow(table, rowIndex)">Remover</button></td></tr></tbody></table></div>
+                    <div class="mt-3 flex flex-wrap gap-2"><AppButton type="button" variant="ghost" @click="addTableRow(table)">Linha</AppButton><AppButton type="button" variant="ghost" @click="addTableColumn(table)">Coluna</AppButton><AppButton type="button" variant="subtle" @click="removeTableColumn(table, table.headers.length - 1)">Remover coluna</AppButton></div>
+                  </div>
+                </div>
               </div>
 
               <div class="mt-3 grid gap-3 md:grid-cols-2">
                 <label v-if="['ATTRIBUTES', 'RESOURCES', 'SKILLS'].includes(activeTab.type)">
                   <span class="label">Valor padrao</span>
-                  <input v-model="record.value" type="number" class="input">
+                  <FormulaTextInput v-model="record.value" :variables="formulaVariables" placeholder="10 + FORCA" />
                 </label>
                 <label v-if="activeTab.type === 'ATTRIBUTES'">
                   <span class="label">Limite minimo</span>
@@ -669,7 +880,7 @@ function setFieldValue(record: SheetTabRecord, key: string, value: unknown) {
                 </label>
                 <label v-if="['ATTRIBUTES', 'RESOURCES'].includes(activeTab.type)">
                   <span class="label">{{ activeTab.type === 'RESOURCES' ? 'Valor maximo' : 'Limite maximo' }}</span>
-                  <input v-model.number="record.max" type="number" class="input" placeholder="Opcional">
+                  <input v-model="record.max" class="input" placeholder="Opcional ou formula">
                 </label>
                 <label v-if="activeTab.type === 'SKILLS'">
                   <span class="label">Atributo relacionado</span>
@@ -689,7 +900,7 @@ function setFieldValue(record: SheetTabRecord, key: string, value: unknown) {
                 </label>
                 <label v-if="activeTab.allowDamageCostAbility && ['WEAPONS', 'ITEMS'].includes(activeTab.type)">
                   <span class="label">Habilidade</span>
-                  <input v-model="record.ability" class="input" placeholder="Opcional">
+                  <textarea v-model="record.ability" rows="3" class="input" placeholder="Opcional. Aceita descricao longa ou Markdown." />
                 </label>
                 <label v-if="['ITEMS', 'WEAPONS'].includes(activeTab.type)">
                   <span class="label">Peso</span>
@@ -699,17 +910,18 @@ function setFieldValue(record: SheetTabRecord, key: string, value: unknown) {
                   <span class="label">Rolagem</span>
                   <FormulaTextInput v-model="record.roll" :variables="formulaVariables" placeholder="1d20 + POT" />
                 </label>
-                <label v-if="activeTab.allowBonuses">
+                <label v-if="false && activeTab.allowBonuses">
                   <span class="label">Bonus / aumento</span>
                   <FormulaTextInput v-model="record.bonus" :variables="formulaVariables" placeholder="+1 POT" />
                 </label>
-                <label v-if="activeTab.allowBonuses">
+                <label v-if="false && activeTab.allowBonuses">
                   <span class="label">Chave do bonus</span>
                   <input v-model="record.bonusKey" class="input font-mono" placeholder="BONUS_ATK" @blur="record.bonusKey = record.bonusKey ? formulaKeyFromLabel(record.bonusKey) : undefined">
                 </label>
                 <label v-if="activeTab.type === 'ITEMS'">
-                  <span class="label">Quantidade padrao</span>
-                  <input v-model.number="record.quantity" type="number" class="input" placeholder="Opcional">
+                  <span class="label">Quantidade padrao *</span>
+                  <input v-model.number="record.quantity" type="number" min="1" class="input" placeholder="1">
+                  <span class="mt-1 block text-xs text-mist">Obrigatorio. Use 1 quando o item for unico.</span>
                 </label>
                 <label class="md:col-span-2">
                   <span class="label">Texto / descricao</span>
@@ -835,3 +1047,4 @@ function setFieldValue(record: SheetTabRecord, key: string, value: unknown) {
     />
   </div>
 </template>
+

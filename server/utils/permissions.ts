@@ -35,3 +35,4 @@ export async function requireRoomMaster(roomId: string, userId: string) {
 
   return room
 }
+

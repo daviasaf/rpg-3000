@@ -21,6 +21,9 @@ export default defineEventHandler(async (event) => {
   if (!system) {
     throw createError({ statusCode: 404, statusMessage: 'Sistema nao encontrado.' })
   }
+  if (system.createdById !== user.id) {
+    throw createError({ statusCode: 403, statusMessage: 'Use apenas sistemas do seu inventario para criar salas.' })
+  }
   if (system.moderationStatus !== 'APPROVED') {
     throw createError({ statusCode: 403, statusMessage: 'Este conteudo ainda esta em analise e nao pode ser usado em sessoes.' })
   }
@@ -30,8 +33,8 @@ export default defineEventHandler(async (event) => {
       where: { id: input.characterId, userId: user.id },
       include: { system: true }
     })
-    if (!character || !compatibleSystem(character.systemId, character.system.schemaJson as Record<string, any>, input.systemId)) {
-      throw createError({ statusCode: 400, statusMessage: 'Escolha um personagem compativel com o sistema.' })
+    if (!character?.systemId || !character.system || !compatibleSystem(character.systemId, character.system.schemaJson as Record<string, any>, input.systemId)) {
+      throw createError({ statusCode: 400, statusMessage: 'Escolha um personagem compativel com um sistema ativo do seu inventario.' })
     }
     if (character.moderationStatus !== 'APPROVED') {
       throw createError({ statusCode: 403, statusMessage: 'Este conteudo ainda esta em analise e nao pode ser usado em sessoes.' })
@@ -64,6 +67,7 @@ export default defineEventHandler(async (event) => {
   return { room }
 })
 
-function compatibleSystem(characterSystemId: string, schema: Record<string, any>, roomSystemId: string) {
+function compatibleSystem(characterSystemId: string | null, schema: Record<string, any>, roomSystemId: string) {
   return characterSystemId === roomSystemId || schema?.provenance?.sourceSystemId === roomSystemId
 }
+

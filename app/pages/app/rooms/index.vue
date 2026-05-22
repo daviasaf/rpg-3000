@@ -29,3 +29,4 @@ const { data } = await useFetch<{ rooms: Array<{
     </EmptyState>
   </div>
 </template>
+

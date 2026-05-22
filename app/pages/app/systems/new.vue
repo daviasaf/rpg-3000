@@ -24,7 +24,7 @@ const schema = ref<SystemSchema>({
   sheetSections: [],
   sheetTexts: [],
   sheetLists: [],
-  levelProgression: [{ id: 'level_rule_1', level: 1, attributeBudget: 6, attributePoints: 5, skillChoices: 0, powerChoices: 0, traitChoices: 0, itemChoices: 0, weaponChoices: 0, inventoryCapacity: 0, notes: '' }],
+  levelProgression: [{ id: 'level_rule_0', level: 0, attributeBudget: 6, attributePoints: 5, skillChoices: 0, powerChoices: 0, traitChoices: 0, itemChoices: 0, weaponChoices: 0, inventoryCapacity: 0, effects: [], tables: [], notes: 'Base inicial do personagem.' }],
   leveling: {
     levelOneAttributePoints: 6,
     attributesPerLevel: 1,
@@ -39,6 +39,7 @@ const fields = ref<DynamicField[]>([])
 async function submit(publish = false) {
   formErrors.value = validateDraft()
   if (formErrors.value.length) {
+    saveIntentOpen.value = false
     push('Corrija os pontos destacados antes de publicar o sistema.', 'error')
     return
   }
@@ -176,8 +177,8 @@ function validateDraft() {
 
     rpgClass.levels.forEach((level) => {
       level.changes.forEach((change) => {
-        if (change.operation !== 'NOTE' && !fieldKeys.has(change.targetKey || '')) {
-          errors.push(`${className} nivel ${level.level}: escolha um atributo, pericia ou recurso valido.`)
+        if (!isClassChangeTargetValid(change, fieldKeys)) {
+          errors.push(`${className} nivel ${level.level}: escolha um alvo valido para a alteracao.`)
         }
         if (change.operation === 'NOTE' && !change.note?.trim()) {
           errors.push(`${className} nivel ${level.level}: escreva o texto que deve aparecer na ficha.`)
@@ -213,8 +214,36 @@ function normalizeOptions(options: unknown) {
   return []
 }
 
+function isClassChangeTargetValid(change: { operation?: string; type?: string; targetKey?: string }, fieldKeys: Set<string>) {
+  if (change.operation === 'NOTE') return true
+  if (change.type === 'ATTRIBUTE_POINT') return (schema.value.sheetTabs || []).some((tab) => tab.type === 'ATTRIBUTES' && (tab.records || []).length)
+  if (change.type === 'DAMAGE_RECEIVED' || formulaKeyFromAny(change.targetKey) === 'DANO_RECEBIDO') return true
+  const key = keyFromLabel(change.targetKey || '')
+  return Boolean(key && fieldKeys.has(key))
+}
+
+function formulaKeyFromAny(value: unknown) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/(^_|_$)/g, '')
+}
+
+function normalizeItemQuantities(tab: NonNullable<SystemSchema['sheetTabs']>[number]) {
+  if (tab.type !== 'ITEMS') return tab
+  return {
+    ...tab,
+    records: (tab.records || []).map((record) => ({
+      ...record,
+      quantity: Math.max(1, Number(record.quantity || 1))
+    }))
+  }
+}
+
 function normalizeSchema(currentSchema: SystemSchema, currentFields: DynamicField[]) {
-  const normalizedTabs = normalizeSheetTabs(currentSchema)
+  const normalizedTabs = normalizeSheetTabs(currentSchema).map(normalizeItemQuantities)
   const normalizedFields = fieldsFromSheetTabs(normalizedTabs, currentFields)
   const targetLabels = new Map(normalizedFields.map((field) => [field.key, field.label]))
   const rulesMarkdown = normalizedTabs
@@ -263,6 +292,7 @@ function normalizeSchema(currentSchema: SystemSchema, currentFields: DynamicFiel
       .filter((item) => item.key && item.name),
     leveling: {
       levelOneAttributePoints: Math.max(0, Math.min(200, Number(currentSchema.leveling?.levelOneAttributePoints ?? 6))),
+      initialLevel: Math.max(0, Math.min(100, Number(currentSchema.leveling?.initialLevel ?? 0))),
       attributesPerLevel: Math.max(0, Math.min(100, Number(currentSchema.leveling?.attributesPerLevel ?? 1))),
       levelOneAttributeLimit: Math.max(1, Math.min(100, Number(currentSchema.leveling?.levelOneAttributeLimit ?? 5))),
       attributeLimitIncreasePerLevel: Math.max(0, Math.min(100, Number(currentSchema.leveling?.attributeLimitIncreasePerLevel ?? 1))),
@@ -270,15 +300,17 @@ function normalizeSchema(currentSchema: SystemSchema, currentFields: DynamicFiel
     },
     levelProgression: (currentSchema.levelProgression || []).map((level, index) => ({
       id: level.id || `level_rule_${index + 1}`,
-      level: Math.max(1, Math.min(100, Number(level.level || index + 1))),
+      level: Math.max(0, Math.min(100, Number(level.level ?? index))),
       attributeBudget: Math.max(0, Math.min(200, Number(level.attributeBudget ?? level.attributePoints ?? 0))),
       attributePoints: Math.max(0, Math.min(200, Number(level.attributePoints || 0))),
       skillChoices: Math.max(0, Math.min(100, Number(level.skillChoices || 0))),
       powerChoices: Math.max(0, Math.min(100, Number(level.powerChoices || 0))),
-      traitChoices: 0,
-      itemChoices: 0,
-      weaponChoices: 0,
+      traitChoices: Math.max(0, Math.min(100, Number(level.traitChoices || 0))),
+      itemChoices: Math.max(0, Math.min(100, Number(level.itemChoices || 0))),
+      weaponChoices: Math.max(0, Math.min(100, Number(level.weaponChoices || 0))),
       inventoryCapacity: Math.max(0, Math.min(10000, Number(level.inventoryCapacity || 0))),
+      effects: level.effects || [],
+      tables: level.tables || [],
       notes: level.notes?.trim() || ''
     })),
     classes: (currentSchema.classes || []).map((rpgClass, classIndex) => ({
@@ -299,11 +331,13 @@ function normalizeSchema(currentSchema: SystemSchema, currentFields: DynamicFiel
           weaponChoices: Math.max(0, Number(level.weaponChoices || 0)),
           inventoryCapacity: Math.max(0, Number(level.inventoryCapacity || 0)),
           changes: level.changes.map((change) => ({
-            targetKey: change.operation === 'NOTE' ? undefined : keyFromLabel(change.targetKey || ''),
-            targetLabel: change.operation === 'NOTE' ? undefined : targetLabels.get(keyFromLabel(change.targetKey || '')) || change.targetLabel || change.targetKey,
+            targetKey: change.operation === 'NOTE' ? undefined : change.type === 'ATTRIBUTE_POINT' ? 'ATTRIBUTE_POINT' : change.type === 'DAMAGE_RECEIVED' ? 'DANO_RECEBIDO' : keyFromLabel(change.targetKey || ''),
+            targetLabel: change.type === 'ATTRIBUTE_POINT' ? 'Ponto livre de atributo' : change.type === 'DAMAGE_RECEIVED' ? 'Dano recebido' : change.operation === 'NOTE' ? undefined : targetLabels.get(keyFromLabel(change.targetKey || '')) || change.targetLabel || change.targetKey,
             operation: change.operation,
             value: Number(change.value || 0),
-            note: change.note?.trim() || ''
+            note: change.note?.trim() || '',
+            type: change.type,
+            choiceCount: change.type === 'ATTRIBUTE_POINT' ? Math.max(1, Number(change.choiceCount || change.value || 1)) : change.choiceCount
           }))
         }))
     }))
@@ -367,3 +401,4 @@ function keyFromLabel(label: string) {
     />
   </div>
 </template>
+

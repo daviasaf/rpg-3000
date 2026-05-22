@@ -2,7 +2,7 @@
 definePageMeta({ layout: 'app', middleware: 'auth' })
 
 const { push, apiError } = useToast()
-const { data: systems } = await useFetch<{ systems: Array<{ id: string; name: string }> }>('/api/systems')
+const { data: systems } = await useFetch<{ systems: Array<{ id: string; name: string }> }>('/api/systems?mine=true')
 const { data: characters } = await useFetch<{ characters: Array<{ id: string; name: string; systemId: string }> }>('/api/characters')
 const form = reactive({
   name: '',
@@ -58,3 +58,4 @@ async function submit() {
     </AppCard>
   </div>
 </template>
+

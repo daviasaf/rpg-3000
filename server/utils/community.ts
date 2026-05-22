@@ -39,7 +39,7 @@ export async function createCommunitySnapshot(input: SnapshotInput) {
 export async function publishSystemSnapshot(systemId: string, authorId: string) {
   const system = await prisma.system.findUnique({
     where: { id: systemId },
-    include: { fields: { orderBy: { order: 'asc' } }, createdBy: { select: { id: true } } }
+    include: { fields: { orderBy: { order: 'asc' } }, createdBy: { select: { id: true, name: true, username: true, avatarUrl: true, profileColor: true } } }
   })
 
   if (!system || system.createdById !== authorId) return null
@@ -63,6 +63,13 @@ export async function publishSystemSnapshot(systemId: string, authorId: string) 
       tags: system.tags,
       visibility: system.visibility,
       schemaJson: system.schemaJson,
+      originalCreator: system.createdBy ? {
+        id: system.createdBy.id,
+        name: system.createdBy.name,
+        username: system.createdBy.username,
+        avatarUrl: system.createdBy.avatarUrl,
+        profileColor: system.createdBy.profileColor
+      } : null,
       fields: system.fields.map((field) => ({
         key: field.key,
         label: field.label,
@@ -124,12 +131,12 @@ export async function publishCharacterSnapshot(characterId: string, authorId: st
     title: character.name,
     description: character.description,
     avatarUrl: character.avatarUrl,
-    tags: [character.system.name],
+    tags: character.system ? [character.system.name] : [],
     status: 'PENDING',
     authorId,
     originalCharacterId: character.id,
     originalSystemId: character.systemId,
-    systemName: character.system.name,
+    systemName: character.system?.name || 'Sistema indisponivel',
     snapshotJson: {
       id: character.id,
       version: (character.dataJson as Record<string, unknown>)?.__meta && typeof (character.dataJson as Record<string, any>).__meta.version === 'string' ? (character.dataJson as Record<string, any>).__meta.version : 'v1',
@@ -137,7 +144,7 @@ export async function publishCharacterSnapshot(characterId: string, authorId: st
       description: character.description,
       avatarUrl: character.avatarUrl,
       systemId: character.systemId,
-      system: {
+      system: character.system ? {
         id: character.system.id,
         name: character.system.name,
         schemaJson: character.system.schemaJson,
@@ -151,8 +158,9 @@ export async function publishCharacterSnapshot(characterId: string, authorId: st
           formula: field.formula,
           order: field.order
         }))
-      },
+      } : null,
       dataJson: character.dataJson
     }
   })
 }
+

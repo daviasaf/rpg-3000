@@ -107,7 +107,9 @@ export const createSystemSchema = z.object({
       defaultRoll: z.string().optional(),
       notes: z.string().optional(),
       categories: z.array(z.string()).optional(),
-      rulesMarkdown: z.string().max(8000).optional(),
+      version: z.string().optional(),
+      provenance: z.record(z.unknown()).optional(),
+      rulesMarkdown: z.string().max(12000).optional(),
       sheetSections: z.array(z.object({
         id: z.string().optional(),
         key: z.string().trim().min(2).max(64).regex(/^[a-zA-Z0-9_/-]+$/, 'Use apenas letras, numeros, hifen, barra ou underline.'),
@@ -151,6 +153,7 @@ export const createSystemSchema = z.object({
         allowDamageCostAbility: z.boolean().optional(),
         textMode: z.enum(['SINGLE', 'LIST']).optional(),
         systemMarkdown: z.string().max(12000).optional(),
+        tables: z.array(z.any()).max(20).optional(),
         fields: z.array(z.object({
           id: z.string().optional(),
           label: z.string().trim().min(1).max(80),
@@ -161,24 +164,25 @@ export const createSystemSchema = z.object({
           options: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
           placeholder: z.string().trim().max(120).optional(),
           helpText: z.string().trim().max(240).optional(),
-          order: z.number().int().min(0).max(100).optional()
+          order: z.number().int().min(0).max(100).optional(),
+          tables: z.array(z.any()).max(20).optional()
         })).max(40).optional(),
         records: z.array(z.object({
           id: z.string().optional(),
           name: z.string().trim().min(1).max(100),
           key: z.string().trim().min(1).max(64).regex(/^[a-zA-Z0-9_/-]+$/, 'Use apenas letras, numeros, hifen, barra ou underline.').optional(),
-          description: z.string().trim().max(1200).optional(),
-          text: z.string().trim().max(4000).optional(),
+          description: z.string().trim().max(12000).optional(),
+          text: z.string().trim().max(12000).optional(),
           value: z.union([z.number(), z.string()]).optional(),
           min: z.number().nullable().optional(),
-          max: z.number().nullable().optional(),
+          max: z.union([z.number(), z.string()]).nullable().optional(),
           relatedAttribute: z.string().trim().max(80).optional(),
           damage: z.string().trim().max(80).optional(),
           weight: z.number().min(0).max(10000).nullable().optional(),
           roll: z.string().trim().max(120).optional(),
           cost: z.string().trim().max(80).optional(),
           range: z.string().trim().max(80).optional(),
-          ability: z.string().trim().max(160).optional(),
+          ability: z.string().trim().max(4000).optional(),
           bonus: z.string().trim().max(240).optional(),
           bonusKey: z.string().trim().max(64).optional(),
           effect: z.string().trim().max(1200).optional(),
@@ -195,12 +199,15 @@ export const createSystemSchema = z.object({
             name: z.string().trim().min(1).max(80),
             key: z.string().trim().min(1).max(64),
             value: z.number().min(-1000).max(1000)
-          })).max(20).optional()
+          })).max(20).optional(),
+          effects: z.array(z.any()).max(80).optional(),
+          levels: z.array(z.any()).max(100).optional(),
+          tables: z.array(z.any()).max(20).optional()
         })).max(200).optional()
       })).max(60).optional(),
       levelProgression: z.array(z.object({
         id: z.string().optional(),
-        level: z.number().int().min(1).max(100),
+        level: z.number().int().min(0).max(100),
         attributeBudget: z.number().int().min(0).max(200).optional(),
         attributePoints: z.number().int().min(0).max(200).optional(),
         skillChoices: z.number().int().min(0).max(100).optional(),
@@ -211,38 +218,44 @@ export const createSystemSchema = z.object({
         inventoryCapacity: z.number().int().min(0).max(10000).optional(),
         resourceGains: z.array(z.object({ key: z.string().trim().max(64), value: z.number(), note: z.string().trim().max(240).optional() })).max(40).optional(),
         bonusGains: z.array(z.object({ name: z.string().trim().max(80), key: z.string().trim().max(64).optional(), value: z.number(), note: z.string().trim().max(240).optional() })).max(40).optional(),
-        notes: z.string().trim().max(600).optional()
+        effects: z.array(z.any()).max(80).optional(),
+        tables: z.array(z.any()).max(20).optional(),
+        notes: z.string().trim().max(1200).optional()
       })).max(100).optional(),
       leveling: z.object({
         attributesPerLevel: z.number().int().min(0).max(100).default(1).optional(),
         levelOneAttributeLimit: z.number().int().min(1).max(100).default(5).optional(),
         attributeLimitIncreasePerLevel: z.number().int().min(0).max(100).default(1).optional(),
         maxAttributeLimit: z.number().int().min(1).max(200).default(20).optional(),
-        levelOneAttributePoints: z.number().int().min(0).max(200).default(6).optional()
+        levelOneAttributePoints: z.number().int().min(0).max(200).default(6).optional(),
+        initialLevel: z.number().int().min(0).max(100).optional()
       }).optional(),
       classes: z.array(z.object({
         id: z.string().optional(),
         key: z.string().trim().min(2).max(64),
         name: z.string().trim().min(2).max(80),
-        description: z.string().trim().max(600).optional(),
+        description: z.string().trim().max(12000).optional(),
         maxLevel: z.number().int().min(1).max(100).default(20),
         levels: z.array(z.object({
-          level: z.number().int().min(1).max(100),
-          description: z.string().trim().max(600).optional(),
+          level: z.number().int().min(0).max(100),
+          description: z.string().trim().max(12000).optional(),
           skillChoices: z.number().int().min(0).max(100).optional(),
           powerChoices: z.number().int().min(0).max(100).optional(),
           traitChoices: z.number().int().min(0).max(100).optional(),
           itemChoices: z.number().int().min(0).max(100).optional(),
           weaponChoices: z.number().int().min(0).max(100).optional(),
+          attributePoints: z.number().int().min(0).max(100).optional(),
           inventoryCapacity: z.number().int().min(0).max(10000).optional(),
           changes: z.array(z.object({
             targetKey: z.string().trim().max(64).optional(),
             targetLabel: z.string().trim().min(1).max(80).optional(),
-            operation: z.enum(['ADD', 'SET', 'NOTE']).default('ADD'),
+            operation: z.enum(['ADD', 'SUBTRACT', 'SET', 'NOTE']).default('ADD'),
             value: z.number().default(1).optional(),
-            note: z.string().trim().max(400).optional()
+            note: z.string().trim().max(1200).optional(),
+            type: z.string().optional(),
+            choiceCount: z.number().int().min(0).max(100).optional()
           }).superRefine((change, ctx) => {
-            if (change.operation !== 'NOTE' && !change.targetKey?.trim()) {
+            if (change.operation !== 'NOTE' && change.type !== 'ATTRIBUTE_POINT' && change.type !== 'DAMAGE_RECEIVED' && !change.targetKey?.trim()) {
               ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['targetKey'], message: 'Escolha o campo alterado pela classe.' })
             }
             if (change.operation === 'NOTE' && !change.note?.trim()) {
@@ -298,3 +311,4 @@ export const diceRollSchema = z.object({
   mode: z.literal('NORMAL').default('NORMAL'),
   hidden: z.boolean().optional().default(false)
 })
+

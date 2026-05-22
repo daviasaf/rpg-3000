@@ -5,3 +5,4 @@ definePageMeta({ layout: 'app', middleware: 'auth' })
 <template>
   <NpcForm mode="create" />
 </template>
+

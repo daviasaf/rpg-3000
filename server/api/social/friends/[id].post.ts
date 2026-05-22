@@ -23,3 +23,4 @@ export default defineEventHandler(async (event) => {
 
   return { request: updated }
 })
+

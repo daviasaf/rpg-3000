@@ -28,3 +28,4 @@ const { data } = await useFetch<{ characters: Array<{
     </EmptyState>
   </div>
 </template>
+

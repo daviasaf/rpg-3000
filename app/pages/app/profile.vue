@@ -22,3 +22,4 @@ const { data, refresh } = await useFetch<any>(() => `/api/social/profile/${auth.
     />
   </div>
 </template>
+

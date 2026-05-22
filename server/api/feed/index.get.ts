@@ -62,3 +62,4 @@ export default defineEventHandler(async (event) => {
 
   return { items: enrichedItems, userId: user.id }
 })
+

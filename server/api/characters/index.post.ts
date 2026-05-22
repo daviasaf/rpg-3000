@@ -22,7 +22,7 @@ async function createUniqueSlug(name: string) {
 export default defineEventHandler(async (event) => {
   const user = await requireAuth(event)
   const input = await readZodBody(event, createCharacterSchema)
-  const system = await prisma.system.findUnique({ where: { id: input.systemId }, include: { fields: true } })
+  const system = await prisma.system.findUnique({ where: { id: input.systemId }, include: { createdBy: { select: { name: true } }, fields: true } })
 
   if (!system) {
     throw createError({ statusCode: 404, statusMessage: 'Sistema nao encontrado.' })
@@ -47,7 +47,7 @@ export default defineEventHandler(async (event) => {
     })
     characterSystem = existingCopy || await prisma.system.create({
       data: {
-        name: `${system.name} - copia`,
+        name: system.name,
         slug: await createUniqueSlug(`${system.name}-${user.id.slice(0, 6)}`),
         description: system.description,
         avatarUrl: system.avatarUrl,
@@ -62,6 +62,7 @@ export default defineEventHandler(async (event) => {
             ...((system.schemaJson as Record<string, any>)?.provenance || {}),
             sourceSystemId: system.id,
             originalCreatorId: system.createdById,
+            originalCreatorName: (system.schemaJson as Record<string, any>)?.provenance?.originalCreatorName || system.createdBy?.name || null,
             copiedById: user.id,
             copiedAt: new Date().toISOString()
           }
@@ -129,3 +130,4 @@ export default defineEventHandler(async (event) => {
 
   return { character }
 })
+

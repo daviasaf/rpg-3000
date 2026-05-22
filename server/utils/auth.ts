@@ -77,3 +77,4 @@ export async function requireAuth(event: H3Event) {
 
   return user
 }
+

@@ -23,8 +23,8 @@ export default defineEventHandler(async (event) => {
     include: { system: true }
   })
 
-  if (!character || !compatibleSystem(character.systemId, character.system.schemaJson as Record<string, any>, room.systemId)) {
-    throw createError({ statusCode: 400, statusMessage: 'Escolha um personagem compativel com o sistema da sala.' })
+  if (!character?.systemId || !character.system || !compatibleSystem(character.systemId, character.system.schemaJson as Record<string, any>, room.systemId)) {
+    throw createError({ statusCode: 400, statusMessage: 'Escolha um personagem compativel com um sistema ativo do seu inventario.' })
   }
   if (character.moderationStatus !== 'APPROVED') {
     throw createError({ statusCode: 403, statusMessage: 'Este conteudo ainda esta em analise e nao pode ser usado em sessoes.' })
@@ -39,6 +39,7 @@ export default defineEventHandler(async (event) => {
   return { member }
 })
 
-function compatibleSystem(characterSystemId: string, schema: Record<string, any>, roomSystemId: string) {
+function compatibleSystem(characterSystemId: string | null, schema: Record<string, any>, roomSystemId: string) {
   return characterSystemId === roomSystemId || schema?.provenance?.sourceSystemId === roomSystemId
 }
+

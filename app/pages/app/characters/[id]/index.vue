@@ -113,6 +113,10 @@ async function toggleFeatured() {
       <h2 class="font-black text-white">Personagem rejeitado</h2>
       <p class="mt-2 text-sm text-red-100">{{ data.character.moderationReason || 'Este personagem esta bloqueado para edicao. Crie uma nova versao para enviar novamente.' }}</p>
     </AppCard>
+    <AppCard v-if="data.character.moderationStatus === 'PENDING'" class="border-amber-300/30 bg-amber-300/10">
+      <h2 class="font-black text-white">Personagem em analise</h2>
+      <p class="mt-2 text-sm text-amber-100">Voce pode editar ou apagar esta ficha, mas ela nao pode entrar em sala, ser destacada ou publicada novamente ate ser aprovada.</p>
+    </AppCard>
     <CharacterSheet :character="data.character" :editable="data.character.moderationStatus !== 'REJECTED'" @saved="refresh" />
     <ConfirmModal
       :open="confirmDeleteOpen"
@@ -134,3 +138,4 @@ async function toggleFeatured() {
     />
   </div>
 </template>
+

@@ -8,10 +8,27 @@ const links = [
   { to: '/app/characters', icon: UserRound, label: 'Personagens' },
   { to: '/app/rooms', icon: UsersRound, label: 'Salas' },
   { to: '/app/community', icon: Globe2, label: 'Comunidade' },
-  { to: '/app/friends', icon: Mail, label: 'Social' }
+  { to: '/app/friends', icon: Mail, label: 'Social', notification: true }
 ]
 
+const route = useRoute()
 const expanded = ref(false)
+const socialNotifications = ref({ unreadMessages: 0, pendingRequests: 0, total: 0 })
+let notificationTimer: ReturnType<typeof setInterval> | null = null
+
+const socialCount = computed(() => socialNotifications.value.total)
+
+async function refreshSocialNotifications() {
+  try {
+    socialNotifications.value = await $fetch('/api/social/notifications')
+  } catch {
+    socialNotifications.value = { unreadMessages: 0, pendingRequests: 0, total: 0 }
+  }
+}
+
+function badgeLabel(count: number) {
+  return count > 99 ? '99+' : String(count)
+}
 
 function applySidebarState() {
   if (!import.meta.client) return
@@ -24,10 +41,20 @@ function toggleSidebar() {
   applySidebarState()
 }
 
+watch(() => route.fullPath, () => {
+  if (route.path.startsWith('/app/friends')) void refreshSocialNotifications()
+})
+
 onMounted(() => {
   const saved = localStorage.getItem('central-rpg:sidebar-expanded')
   expanded.value = saved === null ? window.matchMedia('(min-width: 768px)').matches : saved === '1'
   applySidebarState()
+  void refreshSocialNotifications()
+  notificationTimer = setInterval(() => void refreshSocialNotifications(), 20000)
+})
+
+onBeforeUnmount(() => {
+  if (notificationTimer) clearInterval(notificationTimer)
 })
 </script>
 
@@ -48,13 +75,17 @@ onMounted(() => {
         v-for="link in links"
         :key="link.to"
         :to="link.to"
-        class="flex h-10 items-center rounded-lg text-mist transition hover:bg-white/10 hover:text-white"
+        class="relative flex h-10 items-center rounded-lg text-mist transition hover:bg-white/10 hover:text-white"
         :class="expanded ? 'w-full gap-3 px-3' : 'w-10 justify-center'"
         active-class="bg-white/10 text-ember"
         :title="link.label"
       >
-        <component :is="link.icon" class="h-5 w-5 shrink-0" />
+        <span class="relative grid place-items-center">
+          <component :is="link.icon" class="h-5 w-5 shrink-0" />
+          <span v-if="link.notification && socialCount" class="absolute -right-2 -top-2 min-w-4 rounded-full bg-flare px-1 text-center text-[10px] font-black leading-4 text-white ring-2 ring-[#0b0c14]">{{ badgeLabel(socialCount) }}</span>
+        </span>
         <span v-if="expanded" class="truncate text-sm font-bold">{{ link.label }}</span>
+        <span v-if="expanded && link.notification && socialCount" class="ml-auto rounded-full bg-flare px-2 py-0.5 text-[10px] font-black text-white">{{ badgeLabel(socialCount) }}</span>
       </NuxtLink>
     </nav>
     <NuxtLink
@@ -74,11 +105,14 @@ onMounted(() => {
       v-for="link in links"
       :key="link.to"
       :to="link.to"
-      class="grid min-h-12 place-items-center rounded-md px-1 text-mist transition hover:bg-white/10 hover:text-white"
+      class="relative grid min-h-12 place-items-center rounded-md px-1 text-mist transition hover:bg-white/10 hover:text-white"
       active-class="bg-white/10 text-ember"
       :title="link.label"
     >
-      <component :is="link.icon" class="h-5 w-5" />
+      <span class="relative grid place-items-center">
+        <component :is="link.icon" class="h-5 w-5" />
+        <span v-if="link.notification && socialCount" class="absolute -right-2 -top-2 min-w-4 rounded-full bg-flare px-1 text-center text-[10px] font-black leading-4 text-white ring-2 ring-[#0b0c14]">{{ badgeLabel(socialCount) }}</span>
+      </span>
       <span class="mt-0.5 max-w-full truncate text-[10px] font-bold">{{ link.label }}</span>
     </NuxtLink>
   </nav>

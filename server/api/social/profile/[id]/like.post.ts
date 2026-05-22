@@ -36,3 +36,4 @@ export default defineEventHandler(async (event) => {
   const count = await prisma.userProfileLike.count({ where: { profileId } })
   return { liked: true, count }
 })
+

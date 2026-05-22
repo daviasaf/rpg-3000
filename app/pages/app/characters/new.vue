@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { DynamicField, SheetTab, SheetTabRecord, SystemSchema } from '../../../../shared/types/system'
 import { formulaKeyFromLabel, keyFromLabel, normalizeSheetTabs, sheetTabTypeLabels } from '~~/shared/utils/sheetTabs'
-import { attributeBudgetForLevel, attributeLimitForLevel, progressionTotals, validateCharacterData } from '~~/shared/utils/characterRules'
+import { attributeBudgetForLevel, attributeLimitForLevel, initialLevelForSchema, progressionTotals, resolveNumericDefault, validateCharacterData } from '~~/shared/utils/characterRules'
 import { applyClassProgression } from '../../../utils/characterProgression'
 
 definePageMeta({ layout: 'app', middleware: 'auth' })
@@ -46,12 +46,12 @@ const { data: systems } = await useFetch<{
     schemaJson?: SystemSchema
     fields: DynamicField[]
   }>
-}>('/api/systems')
+}>('/api/systems?mine=true')
 
 const selectedSystemId = ref(String(route.query.systemId || systems.value?.systems[0]?.id || ''))
 const form = reactive({ name: '', description: '', avatarUrl: '' })
 const saveIntentOpen = ref(false)
-const progression = reactive({ classKey: '', level: 1 })
+const progression = reactive({ classKey: '', level: 0 })
 const dataJson = reactive<Record<string, unknown>>({})
 const loading = ref(false)
 const formErrors = ref<string[]>([])
@@ -101,7 +101,7 @@ watch(selectedSystem, (system) => {
   for (const field of system.fields) {
     if (!(field.key in dataJson)) {
       dataJson[field.key] = field.category === 'ATTRIBUTE'
-        ? Number(field.defaultValue ?? 0)
+        ? resolveNumericDefault(field.defaultValue, new Map(Object.entries(dataJson).map(([key, value]) => [formulaKeyFromLabel(key), String(Number(value || 0))])))
         : field.defaultValue ?? ''
     }
   }
@@ -115,12 +115,12 @@ watch(selectedSystem, (system) => {
   }
 
   progression.classKey = system.schemaJson?.classes?.[0]?.key || ''
-  progression.level = 1
+  progression.level = initialLevelForSchema(system.schemaJson)
 }, { immediate: true })
 
 watch(selectedClass, (rpgClass) => {
   if (!rpgClass) return
-  progression.level = Math.max(1, Math.min(Number(progression.level || 1), rpgClass.maxLevel))
+  progression.level = Math.max(initialLevelForSchema(selectedSystem.value?.schemaJson), Math.min(Number(progression.level ?? 0), rpgClass.maxLevel))
 })
 
 async function submit(publish = false) {
@@ -167,7 +167,7 @@ function buildCharacterData() {
   const next: Record<string, unknown> = { ...dataJson }
   const rpgClass = selectedClass.value
 
-  next.nivel = Math.max(1, Math.min(Number(progression.level || 1), rpgClass?.maxLevel || 100))
+  next.nivel = Math.max(initialLevelForSchema(selectedSystem.value?.schemaJson), Math.min(Number(progression.level ?? 0), rpgClass?.maxLevel || 100))
 
   if (rpgClass) next.classe = rpgClass.key
 
@@ -186,7 +186,7 @@ function setAttribute(key: string, delta: number) {
 
 function changeLevel(delta: number) {
   const max = selectedClass.value?.maxLevel || 100
-  progression.level = Math.max(1, Math.min(max, Number(progression.level || 1) + delta))
+  progression.level = Math.max(initialLevelForSchema(selectedSystem.value?.schemaJson), Math.min(max, Number(progression.level ?? 0) + delta))
 }
 
 function hasPreviewAdjustment(field: DynamicField) {
@@ -253,12 +253,35 @@ function tabRecordValue(tab: SheetTab, record: SheetTabRecord, index: number) {
   return tabRecordValues(tab)[tabRecordKey(record, index)] || defaultRecordValue(tab, record)
 }
 
+function recordFormulaKey(record: SheetTabRecord) {
+  return formulaKeyFromLabel(record.key || record.name)
+}
+
+function resourceDerivedValue(tab: SheetTab, record: SheetTabRecord, index: number) {
+  const key = recordFormulaKey(record)
+  const fallback = tabRecordValue(tab, record, index)
+  return Number(previewDataJson.value[key] ?? dataJson[key] ?? fallback.max ?? fallback.current ?? 0)
+}
+
+function resourceSourceRows(record: SheetTabRecord) {
+  const key = recordFormulaKey(record)
+  const sources = previewDataJson.value.__sources as Record<string, Array<{ label: string, value: unknown, note?: string }>> | undefined
+  if (sources?.[key]?.length) return sources[key]
+  const base = Number(dataJson[key] ?? record.value ?? 0)
+  return [{ label: 'Base do sistema', value: base }]
+}
+
+function sourceValueText(value: unknown) {
+  if (typeof value === 'number') return value >= 0 ? `+${value}` : `${value}`
+  return String(value ?? '')
+}
+
 function defaultRecordValue(tab: SheetTab, record: SheetTabRecord): TabRecordValue {
   if (tab.type === 'RESOURCES') {
     return {
       name: record.name,
-      current: record.value ?? 0,
-      max: record.max ?? '',
+      current: resolveNumericDefault(record.value, new Map(Object.entries(dataJson).map(([key, value]) => [formulaKeyFromLabel(key), String(Number(value || 0))]))),
+      max: resolveNumericDefault(record.max, new Map(Object.entries(dataJson).map(([key, value]) => [formulaKeyFromLabel(key), String(Number(value || 0))]))),
       description: record.description || ''
     }
   }
@@ -280,7 +303,7 @@ function defaultRecordValue(tab: SheetTab, record: SheetTabRecord): TabRecordVal
 
   return {
     name: record.name,
-    value: record.value ?? 0,
+    value: resolveNumericDefault(record.value, new Map(Object.entries(dataJson).map(([key, value]) => [formulaKeyFromLabel(key), String(Number(value || 0))]))),
     description: record.description || '',
     relatedAttribute: record.relatedAttribute || ''
   }
@@ -446,7 +469,7 @@ function renderMarkdown(value: unknown) {
   <div class="space-y-5">
     <div>
       <h1 class="page-title">Novo personagem</h1>
-      <p class="muted mt-1">Escolha um sistema e a ficha sera montada automaticamente.</p>
+      <p class="muted mt-1">Escolha um sistema do seu inventario e a ficha sera montada automaticamente.</p>
     </div>
 
     <form class="space-y-5" @submit.prevent="saveIntentOpen = true">
@@ -457,7 +480,7 @@ function renderMarkdown(value: unknown) {
           <label>
             <span class="label">Sistema *</span>
             <select v-model="selectedSystemId" class="select" :disabled="!systems?.systems.length">
-              <option v-if="!systems?.systems.length" value="">Nenhum sistema criado ainda</option>
+              <option v-if="!systems?.systems.length" value="">Nenhum sistema no seu inventario</option>
               <option v-for="system in systems?.systems" :key="system.id" :value="system.id">
                 {{ system.name }}
               </option>
@@ -653,25 +676,30 @@ function renderMarkdown(value: unknown) {
 
           <div v-else-if="tab.type === 'RESOURCES'" class="sheet-record-grid">
             <div v-for="(record, recordIndex) in tab.records || []" :key="record.id || recordIndex"
-              class="rounded-lg border border-white/10 bg-white/[0.04] p-3">
-              <h3 class="font-black text-white">{{ record.name }}</h3>
-              <p v-if="record.description" class="mt-1 text-sm text-mist">{{ record.description }}</p>
-
-              <div class="mt-3 grid grid-cols-2 gap-3">
-                <label>
-                  <span class="label">Atual</span>
-                  <input :value="tabRecordValue(tab, record, recordIndex).current as string | number" type="number"
-                    class="input"
-                    @input="setTabRecordValue(tab, record, recordIndex, 'current', Number(($event.target as HTMLInputElement).value))">
-                </label>
-
-                <label>
-                  <span class="label">Maximo</span>
-                  <input :value="tabRecordValue(tab, record, recordIndex).max as string | number" type="number"
-                    class="input"
-                    @input="setTabRecordValue(tab, record, recordIndex, 'max', Number(($event.target as HTMLInputElement).value))">
-                </label>
+              class="resource-card rounded-lg border border-white/10 bg-white/[0.04] p-4">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <h3 class="font-black text-white">{{ record.name }}</h3>
+                  <p v-if="record.description" class="mt-1 line-clamp-2 text-sm leading-5 text-mist">{{ record.description }}</p>
+                </div>
+                <span class="rounded-md border border-ember/25 bg-ember/10 px-2 py-1 text-xs font-black text-ember">Calculado</span>
               </div>
+
+              <div class="mt-4 rounded-lg border border-white/10 bg-panel/60 p-3">
+                <span class="label">Total inicial</span>
+                <p class="mt-1 text-2xl font-black text-white">{{ resourceDerivedValue(tab, record, recordIndex) }}</p>
+                <p class="mt-1 text-xs text-mist">Definido pelo sistema, nivel, classe e atributos. Nao editavel na criacao.</p>
+              </div>
+
+              <details class="mt-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">
+                <summary class="cursor-pointer text-xs font-black uppercase tracking-[0.12em] text-mist">Origem do valor</summary>
+                <div class="mt-2 space-y-1 text-xs text-mist">
+                  <div v-for="source in resourceSourceRows(record)" :key="`${source.label}:${source.value}`" class="flex items-center justify-between gap-3">
+                    <span>{{ source.label }}</span>
+                    <b class="text-white">{{ sourceValueText(source.value) }}</b>
+                  </div>
+                </div>
+              </details>
             </div>
 
             <p v-if="!(tab.records || []).length"
@@ -811,6 +839,13 @@ function renderMarkdown(value: unknown) {
 
 .sheet-record-wide {
   grid-column: 1 / -1;
+}
+
+.resource-card {
+  min-height: 13.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 
 .line-clamp-2 {

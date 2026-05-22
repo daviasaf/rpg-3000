@@ -30,3 +30,4 @@ export default defineEventHandler(async (event) => {
 
   return { ok: true, deletedUser: { id: user.id, name: user.name } }
 })
+

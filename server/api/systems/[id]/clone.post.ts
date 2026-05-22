@@ -20,7 +20,7 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id') || ''
   const source = await prisma.system.findUnique({
     where: { id },
-    include: { fields: { orderBy: { order: 'asc' } } }
+    include: { createdBy: { select: { id: true, name: true, username: true, avatarUrl: true, profileColor: true } }, fields: { orderBy: { order: 'asc' } } }
   })
 
   if (!source) {
@@ -32,7 +32,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const originalSchema = source.schemaJson as Record<string, any>
-  const name = `${source.name} - copia`
+  const name = source.name
   const originalCreator = source.createdById
   const system = await prisma.system.create({
     data: {
@@ -50,6 +50,7 @@ export default defineEventHandler(async (event) => {
           ...(originalSchema.provenance || {}),
           sourceSystemId: source.id,
           originalCreatorId: originalSchema.provenance?.originalCreatorId || originalCreator,
+          originalCreatorName: originalSchema.provenance?.originalCreatorName || source.createdBy?.name || null,
           copiedById: user.id,
           copiedAt: new Date().toISOString()
         }
@@ -68,8 +69,9 @@ export default defineEventHandler(async (event) => {
         }))
       }
     },
-    include: { fields: { orderBy: { order: 'asc' } } }
+    include: { createdBy: { select: { id: true, name: true, username: true, avatarUrl: true, profileColor: true } }, fields: { orderBy: { order: 'asc' } } }
   })
 
   return { system }
 })
+

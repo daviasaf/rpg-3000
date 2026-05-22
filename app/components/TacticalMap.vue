@@ -400,3 +400,4 @@ async function removeToken(token: MapToken) {
     </div>
   </Teleport>
 </template>
+

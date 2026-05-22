@@ -33,3 +33,4 @@ onMounted(load)
     <textarea v-model="content" class="input mt-4 min-h-32" :placeholder="placeholder" />
   </AppCard>
 </template>
+

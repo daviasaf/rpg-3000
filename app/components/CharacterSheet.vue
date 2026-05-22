@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ChevronDown, Info, Plus, Trash2 } from 'lucide-vue-next'
 import type { DynamicField, SheetTab, SheetTabRecord, SystemSchema } from '../../shared/types/system'
-import { keyFromLabel, normalizeSheetTabs, sheetTabTypeLabels } from '~~/shared/utils/sheetTabs'
+import { formulaKeyFromLabel, keyFromLabel, normalizeSheetTabs, sheetTabTypeLabels } from '~~/shared/utils/sheetTabs'
 import { validateCharacterData } from '~~/shared/utils/characterRules'
 import { classNotes, fieldSources } from '../utils/characterProgression'
 
@@ -41,7 +41,7 @@ const props = defineProps<{
     moderationStatus?: string | null
     moderationReason?: string | null
     dataJson: Record<string, unknown>
-    system: { name: string; schemaJson?: SystemSchema; fields: DynamicField[] }
+    system: { name: string; schemaJson?: SystemSchema; fields: DynamicField[]; unavailable?: boolean; removedAt?: string | null }
   }
   roomId?: string
   editable?: boolean
@@ -70,6 +70,8 @@ const className = computed(() => {
   return props.character.system.schemaJson?.classes?.find((item) => item.key === classKey)?.name || classKey
 })
 const isRejected = computed(() => props.character.moderationStatus === 'REJECTED')
+const isPending = computed(() => props.character.moderationStatus === 'PENDING')
+const isSystemUnavailable = computed(() => Boolean(props.character.system.unavailable))
 const sheetTabs = computed(() => normalizeSheetTabs(props.character.system.schemaJson))
 const tabFieldKeys = computed(() => new Set(sheetTabs.value.flatMap((tab) => (tab.records || []).map((record) => keyFromLabel(`${tab.key}_${record.name}`)))))
 const sheetLists = computed(() => sheetTabs.value.length ? [] : (props.character.system.schemaJson?.sheetLists || []).filter((list) => list.enabled !== false))
@@ -319,8 +321,24 @@ function renderMarkdown(value: unknown) {
     .replace(/\n/g, '<br>')
 }
 
+function effectSummary(effect: { targetLabel?: string | null; targetKey?: string | null; operation?: string | null; value?: unknown; choiceCount?: number | null; type?: string | null }) {
+  if (effect.type === 'ATTRIBUTE_POINT') return `${effect.choiceCount || effect.value || 1} ponto(s) de atributo`
+  if (effect.operation === 'NOTE') return String(effect.value || 'texto')
+  return `${effect.targetLabel || effect.targetKey || 'alvo'} ${effect.operation || ''} ${effect.value ?? ''}`.trim()
+}
+
 function sourceItems() {
   return [{ key: 'source', label: 'Origem do valor', icon: Info }]
+}
+
+function resourceField(record: SheetTabRecord): DynamicField {
+  return {
+    key: record.key || formulaKeyFromLabel(record.name),
+    label: record.name,
+    type: 'NUMBER',
+    category: 'RESOURCE',
+    defaultValue: record.value ?? 0
+  }
 }
 
 function handleFieldAction(field: DynamicField, action: string) {
@@ -414,6 +432,11 @@ onBeforeUnmount(() => {
       @save="saveIntentOpen = true"
     />
 
+    <AppCard v-if="isSystemUnavailable" class="border-ember/35 bg-ember/10">
+      <h2 class="text-lg font-black text-white">Sistema original indisponivel</h2>
+      <p class="mt-1 text-sm leading-6 text-mist">Esta ficha foi preservada com um snapshot minimo do sistema usado. Acoes que dependem do sistema ativo, como sala e versoes novas, podem ficar bloqueadas ate voce escolher outro sistema compativel.</p>
+    </AppCard>
+
     <div class="space-y-5">
       <AppCard v-if="visibleClassNotes.length" class="border-ember/25 bg-ember/5">
         <h2 class="text-lg font-black text-white">Textos da classe</h2>
@@ -434,6 +457,17 @@ onBeforeUnmount(() => {
         </button>
 
         <div v-if="isGroupOpen(`tab:${tab.key}`)" class="mt-4">
+          <div v-if="tab.tables?.length" class="mb-4 space-y-3">
+            <div v-for="table in tab.tables" :key="table.id || table.title" class="overflow-hidden rounded-lg border border-white/10 bg-white/[0.035]">
+              <div v-if="table.title" class="border-b border-white/10 px-3 py-2 text-sm font-black text-white">{{ table.title }}</div>
+              <div class="overflow-x-auto">
+                <table class="min-w-full text-left text-sm text-mist">
+                  <thead><tr><th v-for="header in table.headers" :key="header" class="border-b border-white/10 px-3 py-2 font-black text-white">{{ header }}</th></tr></thead>
+                  <tbody><tr v-for="(row, rowIndex) in table.rows" :key="rowIndex"><td v-for="(_, columnIndex) in table.headers" :key="columnIndex" class="border-t border-white/5 px-3 py-2">{{ tableCell(row[columnIndex]) }}</td></tr></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
           <div v-if="tab.type === 'RULES'" class="rounded-lg border border-white/10 bg-white/[0.04] p-4 text-sm leading-6 text-mist">
             <div class="markdown-preview" v-html="renderMarkdown(tab.systemMarkdown || '')" />
           </div>
@@ -475,9 +509,15 @@ onBeforeUnmount(() => {
           </div>
 
           <div v-else-if="tab.type === 'RESOURCES'" class="sheet-record-grid">
-            <div v-for="(record, recordIndex) in tab.records || []" :key="record.id || recordIndex" class="rounded-lg border border-white/10 bg-white/[0.04] p-3">
-              <h3 class="font-black text-white">{{ record.name }}</h3>
-              <div class="sheet-resource-grid mt-3">
+            <div v-for="(record, recordIndex) in tab.records || []" :key="record.id || recordIndex" class="resource-card rounded-lg border border-white/10 bg-white/[0.04] p-4">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <h3 class="truncate font-black text-white">{{ record.name }}</h3>
+                  <p v-if="record.description" class="mt-1 line-clamp-2 text-sm leading-5 text-mist">{{ record.description }}</p>
+                </div>
+                <AppActionMenu title="Detalhes do recurso" :items="sourceItems()" trigger-class="grid h-8 w-8 place-items-center rounded-lg border border-white/10 bg-white/[0.04] text-mist hover:text-white" @select="handleFieldAction(resourceField(record), $event)" />
+              </div>
+              <div class="sheet-resource-grid mt-4">
                 <label>
                   <span class="label">Atual</span>
                   <input :value="tabRecordValue(tab, record, recordIndex).current as string | number" type="number" class="input" :readonly="tabReadonly(tab)" @input="setTabRecordValue(tab, record, recordIndex, 'current', Number(($event.target as HTMLInputElement).value))">
@@ -487,7 +527,6 @@ onBeforeUnmount(() => {
                   <input :value="tabRecordValue(tab, record, recordIndex).max as string | number" type="number" class="input" :readonly="tabReadonly(tab)" @input="setTabRecordValue(tab, record, recordIndex, 'max', Number(($event.target as HTMLInputElement).value))">
                 </label>
               </div>
-              <p v-if="record.description" class="mt-2 text-sm text-mist">{{ record.description }}</p>
             </div>
           </div>
 
@@ -519,6 +558,7 @@ onBeforeUnmount(() => {
                 <span v-if="record.bonus" class="rounded-md border border-white/10 bg-panel/60 px-2 py-1 text-mist">{{ record.bonus }}</span>
                 <span v-if="record.weight" class="rounded-md border border-white/10 bg-panel/60 px-2 py-1 text-mist">Peso {{ record.weight }}</span>
               </div>
+              <p v-if="record.effects?.length" class="mt-3 text-xs leading-5 text-mist">Modificacoes: {{ record.effects.map(effectSummary).join(' | ') }}</p>
             </button>
           </div>
 
@@ -552,9 +592,9 @@ onBeforeUnmount(() => {
                 </label>
                 <label v-if="tab.allowDamageCostAbility && ['WEAPONS', 'ITEMS'].includes(tab.type)">
                   <span class="label">Habilidade</span>
-                  <input v-model="item.ability" class="input" :readonly="tabReadonly(tab)" placeholder="Opcional">
+                  <textarea v-model="item.ability" rows="3" class="input" :readonly="tabReadonly(tab)" placeholder="Opcional" />
                 </label>
-                <label v-if="tab.allowBonuses">
+                <label v-if="false && tab.allowBonuses">
                   <span class="label">Bonus / aumento</span>
                   <input v-model="item.bonus" class="input" :readonly="tabReadonly(tab)" placeholder="+1 Potencia">
                 </label>
@@ -742,6 +782,8 @@ onBeforeUnmount(() => {
       title="Salvar ficha"
       message="Salvar atualiza sua ficha pessoal. Salvar e postar cria um snapshot independente para analise da comunidade."
       :loading="saving || publishing"
+      :can-publish="!isPending && !isRejected"
+      publish-disabled-reason="Esta ficha ainda esta em analise. Voce pode editar e salvar, mas nao pode postar novamente ate a revisao terminar."
       @close="saveIntentOpen = false"
       @save="save(false, false)"
       @publish="save(false, true)"
@@ -758,6 +800,13 @@ onBeforeUnmount(() => {
 
 .sheet-record-wide {
   grid-column: 1 / -1;
+}
+
+.resource-card {
+  min-height: 10.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 
 .sheet-field-grid {
@@ -800,3 +849,4 @@ onBeforeUnmount(() => {
   color: var(--color-ember, #ff8a13);
 }
 </style>
+

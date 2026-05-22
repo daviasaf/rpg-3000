@@ -53,12 +53,13 @@ export default defineEventHandler(async (event) => {
       const count = await prisma.npc.count({
         where: {
           id: { in: npcIds },
-          createdById: access.masterId
+          createdById: access.masterId,
+          moderationStatus: 'APPROVED'
         }
       })
 
       if (count !== npcIds.length) {
-        throw createError({ statusCode: 403, statusMessage: 'NPC indisponivel para esta sala.' })
+        throw createError({ statusCode: 403, statusMessage: 'NPC indisponivel para esta sala. Ele precisa estar aprovado e no inventario do mestre.' })
       }
     }
   }
@@ -110,3 +111,4 @@ export default defineEventHandler(async (event) => {
 
   return { map: room.mapJson }
 })
+

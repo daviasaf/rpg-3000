@@ -103,3 +103,4 @@ async function saveIdentity() {
     <CharacterSheet :character="editableCharacter" :editable="!isRejected" @saved="refresh" />
   </div>
 </template>
+

@@ -10,3 +10,4 @@ export default defineEventHandler(async (event) => {
   await prisma.room.delete({ where: { id } })
   return { ok: true }
 })
+

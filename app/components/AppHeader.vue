@@ -24,3 +24,4 @@ const accent = computed(() => auth.user?.profileColor || '#ff8a13')
     </div>
   </header>
 </template>
+

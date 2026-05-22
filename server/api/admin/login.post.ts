@@ -12,3 +12,4 @@ export default defineEventHandler(async (event) => {
   await setAdminCookie(event)
   return { ok: true }
 })
+

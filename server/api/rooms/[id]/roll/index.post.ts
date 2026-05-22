@@ -120,3 +120,4 @@ function formatDiceResult(dice: ReturnType<typeof parseAndRollDice>) {
 
   return lines.join('\n')
 }
+

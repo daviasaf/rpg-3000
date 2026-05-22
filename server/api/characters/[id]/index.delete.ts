@@ -18,3 +18,4 @@ export default defineEventHandler(async (event) => {
   await prisma.character.delete({ where: { id } })
   return { ok: true }
 })
+

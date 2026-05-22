@@ -1,5 +1,13 @@
 <script setup lang="ts">
 import { Swords } from 'lucide-vue-next'
+import { useAuthStore } from '~/stores/auth'
+
+const auth = useAuthStore()
+
+onMounted(async () => {
+  if (!auth.user) await auth.fetchMe()
+  if (auth.user) await navigateTo('/app')
+})
 </script>
 
 <template>
@@ -32,6 +40,7 @@ import { Swords } from 'lucide-vue-next'
           </p>
           <div class="mt-8 flex flex-wrap gap-3">
             <NuxtLink to="/register"><AppButton>Jogar RPG</AppButton></NuxtLink>
+            <NuxtLink to="/login"><AppButton variant="ghost">Entrar</AppButton></NuxtLink>
           </div>
         </div>
 
@@ -53,3 +62,4 @@ import { Swords } from 'lucide-vue-next'
   background-size: 36px 36px;
 }
 </style>
+

@@ -17,3 +17,4 @@ export default defineEventHandler(async (event) => {
   await prisma.communityPostComment.delete({ where: { id } })
   return { ok: true }
 })
+

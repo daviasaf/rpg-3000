@@ -30,3 +30,4 @@ export default <Partial<Config>>{
   },
   plugins: []
 }
+

@@ -22,3 +22,4 @@ export default defineEventHandler(async (event) => {
   await prisma.npcLike.create({ data: { npcId, userId: user.id } })
   return { liked: true }
 })
+

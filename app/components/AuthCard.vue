@@ -11,3 +11,4 @@ defineProps<{ title: string; subtitle: string }>()
     </div>
   </section>
 </template>
+

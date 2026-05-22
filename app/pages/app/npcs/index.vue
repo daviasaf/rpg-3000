@@ -58,7 +58,7 @@ async function publishNpc(id: string) {
 function actionItems(npc: { id: string, moderationStatus?: string, featuredOnProfile?: boolean }) {
   return [
     { key: 'edit', label: 'Editar', icon: Edit3, disabled: npc.moderationStatus === 'REJECTED' },
-    { key: 'publish', label: 'Publicar', icon: Send, disabled: npc.moderationStatus === 'REJECTED' || busyId.value === npc.id },
+    { key: 'publish', label: npc.moderationStatus === 'PENDING' ? 'Em analise' : 'Publicar', icon: Send, disabled: npc.moderationStatus === 'REJECTED' || npc.moderationStatus === 'PENDING' || busyId.value === npc.id },
     {
       key: 'feature',
       label: npc.featuredOnProfile ? 'Remover destaque' : 'Destacar no perfil',
@@ -126,6 +126,9 @@ async function toggleFeatured(npc: { id: string, featuredOnProfile?: boolean }) 
             {{ (attack as Record<string, unknown>).name }}: {{ (attack as Record<string, unknown>).damage }}
           </span>
         </div>
+        <p v-if="npc.moderationStatus === 'PENDING'" class="mt-3 rounded-lg border border-amber-300/30 bg-amber-300/10 p-3 text-sm font-bold text-amber-100">
+          Este NPC ainda esta em analise. Voce pode editar ou apagar, mas nao pode publicar novamente, destacar ou usar em sessao ate ser aprovado.
+        </p>
         <p v-if="npc.moderationStatus === 'REJECTED'" class="mt-3 rounded-lg border border-flare/35 bg-flare/10 p-3 text-sm font-bold text-red-100">
           Rejeitado{{ npc.moderationReason ? `: ${npc.moderationReason}` : '. Bloqueado para edicao.' }}
         </p>
@@ -136,3 +139,4 @@ async function toggleFeatured(npc: { id: string, featuredOnProfile?: boolean }) 
     </EmptyState>
   </div>
 </template>
+

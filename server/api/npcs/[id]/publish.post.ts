@@ -12,6 +12,7 @@ export default defineEventHandler(async (event) => {
 
   if (!npc) throw createError({ statusCode: 404, statusMessage: 'NPC nao encontrado.' })
   if (npc.createdById !== user.id) throw createError({ statusCode: 403, statusMessage: 'Voce so pode publicar seus NPCs.' })
+  if (npc.moderationStatus === 'PENDING') throw createError({ statusCode: 403, statusMessage: 'Este conteudo ainda esta em analise. Voce pode editar ou apagar, mas nao pode publicar novamente ate ser aprovado.' })
   if (npc.moderationStatus === 'REJECTED') throw createError({ statusCode: 403, statusMessage: 'NPC rejeitado nao pode ser republicado por edicao. Crie uma nova versao.' })
   const meta = (npc.dataJson as Record<string, any>)?.__meta
   if (meta?.originalCreatorId && meta.originalCreatorId !== user.id) {
@@ -29,3 +30,4 @@ export default defineEventHandler(async (event) => {
   const post = await publishNpcSnapshot(id, user.id)
   return { post }
 })
+

@@ -35,3 +35,4 @@ export default defineEventHandler(async (event) => {
   await setAuthCookie(event, user.id)
   return { user }
 })
+

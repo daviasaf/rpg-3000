@@ -1,4 +1,4 @@
-import type { DynamicField, FieldCategory, FieldType, SheetFieldType, SheetTab, SheetTabField, SheetTabRecord, SheetTabType, SystemSchema } from '../types/system'
+import type { DynamicField, FieldCategory, FieldType, RuleEffect, RuleTable, SheetFieldType, SheetTab, SheetTabField, SheetTabRecord, SheetTabType, SystemSchema } from '../types/system'
 
 export const sheetTabTypeLabels: Record<SheetTabType, string> = {
   ATTRIBUTES: 'Atributos',
@@ -18,16 +18,16 @@ export const sheetTabTypeLabels: Record<SheetTabType, string> = {
 
 export const sheetFieldTypeLabels: Record<SheetFieldType, string> = {
   SHORT_TEXT: 'Texto curto',
-  LONG_TEXT: 'Texto longo',
-  NUMBER: 'Numero',
+  LONG_TEXT: 'Texto longo / Markdown',
+  NUMBER: 'Numero ou formula',
   CHECKBOX: 'Checkbox',
   SELECT: 'Select',
   LIST: 'Lista',
-  DAMAGE: 'Dano',
+  DAMAGE: 'Dano / formula',
   ROLL: 'Formula de rolagem',
   COST: 'Custo',
   RANGE: 'Alcance',
-  BONUS: 'Bonus / aumento',
+  BONUS: 'Bonus legado',
   IMAGE: 'Imagem / avatar',
   TAGS: 'Tags',
   EXTRA_PAIR: 'Campo extra nome + valor'
@@ -50,6 +50,33 @@ export function uid(prefix: string) {
   return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`
 }
 
+export function createEmptyRuleTable(): RuleTable {
+  return {
+    id: uid('rule_table'),
+    title: 'Tabela de regra',
+    headers: ['Coluna 1', 'Coluna 2'],
+    rows: [
+      ['Linha 1', ''],
+      ['Linha 2', '']
+    ]
+  }
+}
+
+export function createRuleEffect(type: RuleEffect['type'] = 'TEXT', target?: { key: string; label: string }): RuleEffect {
+  return {
+    id: uid('rule_effect'),
+    type,
+    targetKey: target?.key,
+    targetLabel: target?.label,
+    operation: type === 'TEXT' ? 'NOTE' : type === 'ATTRIBUTE_POINT' ? 'CHOICE' : 'ADD',
+    value: type === 'ATTRIBUTE_POINT' ? 1 : 0,
+    choiceCount: type === 'ATTRIBUTE_POINT' ? 1 : undefined,
+    perPoint: false,
+    condition: '',
+    note: ''
+  }
+}
+
 export function createSheetTab(type: SheetTabType, index = 0): SheetTab {
   const name = sheetTabTypeLabels[type]
   const base: SheetTab = {
@@ -65,25 +92,26 @@ export function createSheetTab(type: SheetTabType, index = 0): SheetTab {
     allowMultiple: !['RULES'].includes(type),
     allowExtraFields: ['ITEMS', 'WEAPONS', 'TRAITS', 'POWERS', 'CONDITIONS', 'CUSTOM'].includes(type),
     allowRolls: ['ITEMS', 'WEAPONS', 'POWERS', 'CONDITIONS', 'ROLLS', 'CUSTOM'].includes(type),
-    allowBonuses: ['CLASS_PROGRESS', 'ITEMS', 'WEAPONS', 'TRAITS', 'POWERS', 'CONDITIONS', 'CUSTOM'].includes(type),
+    allowBonuses: false,
     allowDamageCostAbility: ['ITEMS', 'WEAPONS', 'POWERS', 'CUSTOM'].includes(type),
     textMode: type === 'TEXT_BLOCKS' ? 'LIST' : undefined,
     fields: defaultFieldsForType(type),
     records: defaultRecordsForType(type),
-    systemMarkdown: type === 'RULES' ? '' : undefined
+    systemMarkdown: type === 'RULES' ? '' : undefined,
+    tables: []
   }
 
   if (type === 'CUSTOM') {
     base.name = 'Aba personalizada'
     base.key = uniqueKey(base.name, index)
-    base.description = 'Monte seus proprios campos para esta parte da ficha.'
+    base.description = 'Monte seus proprios campos, niveis, tabelas e modificacoes para esta parte da ficha.'
   }
 
   return base
 }
 
 function uniqueKey(label: string, index: number) {
-  const key = keyFromLabel(label)
+  const key = keyFromLabel(label) || 'aba'
   return index > 0 ? `${key}_${index + 1}` : key
 }
 
@@ -96,18 +124,19 @@ export function defaultFieldsForType(type: SheetTabType): SheetTabField[] {
     required: false,
     defaultValue: type === 'NUMBER' ? 0 : type === 'CHECKBOX' ? false : '',
     order,
+    tables: [],
     ...extra
   })
 
   if (type === 'ATTRIBUTES') return [field('Valor', 'NUMBER', 0), field('Minimo', 'NUMBER', 1), field('Maximo', 'NUMBER', 2), field('Descricao', 'LONG_TEXT', 3)]
   if (type === 'RESOURCES') return [field('Valor atual', 'NUMBER', 0), field('Valor maximo', 'NUMBER', 1), field('Descricao', 'LONG_TEXT', 2)]
   if (type === 'SKILLS') return [field('Valor', 'NUMBER', 0), field('Atributo relacionado', 'SHORT_TEXT', 1), field('Descricao', 'LONG_TEXT', 2)]
-  if (type === 'ITEMS') return [field('Texto', 'LONG_TEXT', 0), field('Peso', 'NUMBER', 1), field('Rolagem', 'ROLL', 2), field('Dano', 'DAMAGE', 3), field('Bonus', 'BONUS', 4), field('Quantidade', 'NUMBER', 5)]
-  if (type === 'WEAPONS') return [field('Texto', 'LONG_TEXT', 0), field('Dano', 'DAMAGE', 1), field('Peso', 'NUMBER', 2), field('Habilidade', 'SHORT_TEXT', 3), field('Rolagem', 'ROLL', 4), field('Bonus', 'BONUS', 5)]
-  if (type === 'TRAITS') return [field('Texto', 'LONG_TEXT', 0), field('Bonus', 'BONUS', 1), field('Efeito', 'LONG_TEXT', 2)]
-  if (type === 'POWERS') return [field('Texto', 'LONG_TEXT', 0), field('Dano', 'DAMAGE', 1), field('Custo', 'COST', 2), field('Alcance', 'RANGE', 3), field('Rolagem', 'ROLL', 4), field('Bonus', 'BONUS', 5)]
+  if (type === 'ITEMS') return [field('Texto', 'LONG_TEXT', 0), field('Peso', 'NUMBER', 1), field('Rolagem', 'ROLL', 2), field('Dano', 'DAMAGE', 3), field('Quantidade', 'NUMBER', 4, { required: true, defaultValue: 1, helpText: 'Quantidade inicial obrigatoria do item.' })]
+  if (type === 'WEAPONS') return [field('Texto', 'LONG_TEXT', 0), field('Dano', 'DAMAGE', 1), field('Peso', 'NUMBER', 2), field('Habilidade', 'LONG_TEXT', 3), field('Rolagem', 'ROLL', 4)]
+  if (type === 'TRAITS') return [field('Texto', 'LONG_TEXT', 0), field('Efeito', 'LONG_TEXT', 1)]
+  if (type === 'POWERS') return [field('Texto', 'LONG_TEXT', 0), field('Dano', 'DAMAGE', 1), field('Custo', 'COST', 2), field('Alcance', 'RANGE', 3), field('Rolagem', 'ROLL', 4)]
   if (type === 'TEXT_BLOCKS') return [field('Texto', 'LONG_TEXT', 0)]
-  if (type === 'CONDITIONS') return [field('Texto', 'LONG_TEXT', 0), field('Efeito', 'LONG_TEXT', 1), field('Bonus ou penalidade', 'BONUS', 2), field('Rolagem', 'ROLL', 3)]
+  if (type === 'CONDITIONS') return [field('Texto', 'LONG_TEXT', 0), field('Efeito', 'LONG_TEXT', 1), field('Rolagem', 'ROLL', 2)]
   if (type === 'ROLLS') return [field('Formula', 'ROLL', 0), field('Dado base', 'SHORT_TEXT', 1), field('Atributo usado', 'SHORT_TEXT', 2), field('Modificador', 'NUMBER', 3), field('Descricao', 'LONG_TEXT', 4)]
   if (type === 'CUSTOM') return [field('Nome', 'SHORT_TEXT', 0, { required: true }), field('Descricao', 'LONG_TEXT', 1)]
   return []
@@ -143,14 +172,15 @@ export function normalizeSheetTab(tab: SheetTab, index: number): SheetTab {
     readonly: Boolean(tab.readonly || tab.type === 'RULES'),
     playerEditable: true,
     allowMultiple: tab.type === 'RULES' ? false : tab.allowMultiple !== false,
-    allowExtraFields: Boolean(tab.allowExtraFields),
-    allowRolls: Boolean(tab.allowRolls),
-    allowBonuses: Boolean(tab.allowBonuses),
-    allowDamageCostAbility: Boolean(tab.allowDamageCostAbility),
+    allowExtraFields: Boolean(tab.allowExtraFields || ['ITEMS', 'WEAPONS', 'TRAITS', 'POWERS', 'CONDITIONS', 'CUSTOM'].includes(tab.type)),
+    allowRolls: Boolean(tab.allowRolls || ['ITEMS', 'WEAPONS', 'POWERS', 'CONDITIONS', 'ROLLS', 'CUSTOM'].includes(tab.type)),
+    allowBonuses: false,
+    allowDamageCostAbility: Boolean(tab.allowDamageCostAbility || ['ITEMS', 'WEAPONS', 'POWERS', 'CUSTOM'].includes(tab.type)),
     textMode: tab.textMode || (tab.type === 'TEXT_BLOCKS' ? 'LIST' : undefined),
     fields: (tab.fields?.length ? tab.fields : defaultFieldsForType(tab.type)).map((field, fieldIndex) => normalizeSheetTabField(field, fieldIndex)),
     records: uniqueRecordKeys((tab.records || []).map((record, recordIndex) => normalizeSheetTabRecord(record, recordIndex))),
-    systemMarkdown: tab.type === 'RULES' ? String(tab.systemMarkdown || '') : tab.systemMarkdown
+    systemMarkdown: tab.type === 'RULES' ? String(tab.systemMarkdown || '') : tab.systemMarkdown,
+    tables: normalizeTables(tab.tables)
   }
 }
 
@@ -164,22 +194,35 @@ export function normalizeSheetTabField(field: SheetTabField, index: number): She
     type: field.type || 'SHORT_TEXT',
     required: Boolean(field.required),
     options: Array.isArray(field.options) ? field.options.map(String).map((item) => item.trim()).filter(Boolean) : [],
-    order: index
+    order: index,
+    tables: normalizeTables(field.tables)
   }
 }
 
 export function normalizeSheetTabRecord(record: SheetTabRecord, index: number): SheetTabRecord {
   const name = String(record.name || `Registro ${index + 1}`).trim()
+  const recordKey = formulaKeyFromLabel(record.key || name) || `REGISTRO_${index + 1}`
   return {
     ...record,
     id: record.id || uid('sheet_record'),
     name,
-    key: formulaKeyFromLabel(record.key || name),
+    key: recordKey,
     description: record.description || '',
     text: record.text || '',
     weight: record.weight === null || record.weight === undefined ? null : Math.max(0, Number(record.weight || 0)),
     bonusKey: record.bonusKey ? formulaKeyFromLabel(record.bonusKey) : undefined,
     extraFields: record.extraFields || [],
+    effects: normalizeEffects(record.effects),
+    levels: (record.levels || []).map((level, levelIndex) => ({
+      ...level,
+      id: level.id || uid('record_level'),
+      level: Math.max(0, Number(level.level ?? levelIndex)),
+      name: level.name || `Nivel ${level.level ?? levelIndex}`,
+      description: level.description || '',
+      effects: normalizeEffects(level.effects),
+      tables: normalizeTables(level.tables)
+    })),
+    tables: normalizeTables(record.tables),
     skillLevels: (record.skillLevels || []).map((level, levelIndex) => ({
       id: level.id || uid('skill_level'),
       name: String(level.name || `Nivel ${levelIndex + 1}`).trim(),
@@ -187,6 +230,32 @@ export function normalizeSheetTabRecord(record: SheetTabRecord, index: number): 
       value: Number(level.value || 0)
     }))
   }
+}
+
+export function normalizeEffects(effects: RuleEffect[] | undefined): RuleEffect[] {
+  return (effects || []).map((effect) => ({
+    ...effect,
+    id: effect.id || uid('rule_effect'),
+    type: effect.type || 'TEXT',
+    targetKey: effect.targetKey ? formulaKeyFromLabel(effect.targetKey) : undefined,
+    targetLabel: effect.targetLabel || effect.targetKey || '',
+    operation: effect.operation || 'ADD',
+    value: effect.value ?? 0,
+    choiceCount: effect.choiceCount === undefined ? undefined : Math.max(0, Number(effect.choiceCount || 0)),
+    perPoint: Boolean(effect.perPoint),
+    condition: effect.condition || '',
+    note: effect.note || ''
+  }))
+}
+
+export function normalizeTables(tables: RuleTable[] | undefined): RuleTable[] {
+  return (tables || []).map((table) => ({
+    ...table,
+    id: table.id || uid('rule_table'),
+    title: table.title || 'Tabela',
+    headers: table.headers?.length ? table.headers.map(String) : ['Coluna 1', 'Coluna 2'],
+    rows: table.rows?.length ? table.rows.map((row) => row.map(String)) : [['', ''], ['', '']]
+  }))
 }
 
 function uniqueRecordKeys(records: SheetTabRecord[]) {
@@ -220,7 +289,7 @@ export function legacyTabsFromSchema(schema: SystemSchema | undefined): SheetTab
       allowMultiple: Boolean(section.multiple),
       allowExtraFields: Boolean(section.allowExtras),
       allowRolls: Boolean(section.allowDamage || section.allowSkill),
-      allowBonuses: Boolean(section.allowSkill),
+      allowBonuses: false,
       allowDamageCostAbility: Boolean(section.allowDamage || section.allowSkill)
     })
     order += 1
@@ -237,7 +306,7 @@ export function legacyTabsFromSchema(schema: SystemSchema | undefined): SheetTab
       order,
       allowExtraFields: list.allowExtras !== false,
       allowRolls: Boolean(list.allowDamage || list.allowSkill),
-      allowBonuses: Boolean(list.allowSkill),
+      allowBonuses: false,
       allowDamageCostAbility: Boolean(list.allowDamage || list.allowSkill)
     })
     order += 1
@@ -283,7 +352,7 @@ export function fieldsFromSheetTabs(tabs: SheetTab[], existingFields: DynamicFie
     })
   }
 
-  return [...generated, ...oldNonTabFields].map((field, index) => ({ ...field, order: index }))
+  return [...generated, ...oldNonTabFields].map((field, index) => ({ ...field, key: formulaKeyFromLabel(field.key || field.label), order: index }))
 }
 
 function fieldCategoryForTab(type: SheetTabType): FieldCategory | null {
@@ -300,5 +369,5 @@ function fieldTypeForTab(type: SheetTabType): FieldType {
 
 function defaultValueForRecord(record: SheetTabRecord, type: SheetTabType) {
   if (type === 'ROLLS') return record.roll || record.fields?.formula || ''
-  return Number(record.value ?? 0)
+  return record.value ?? 0
 }

@@ -13,5 +13,20 @@ export default defineEventHandler(async (event) => {
     orderBy: { updatedAt: 'desc' }
   }))
 
-  return { characters }
+  return { characters: characters.map(withSystemFallback) }
 })
+
+function withSystemFallback(character: any) {
+  if (character.system) return character
+  const snapshot = character.systemSnapshotJson as any
+  return {
+    ...character,
+    system: {
+      id: null,
+      name: snapshot?.name || character.dataJson?.__meta?.systemName || 'Sistema removido',
+      slug: '',
+      schemaJson: snapshot?.schemaJson || {},
+      unavailable: true
+    }
+  }
+}

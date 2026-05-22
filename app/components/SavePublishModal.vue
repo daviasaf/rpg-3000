@@ -1,10 +1,16 @@
 <script setup lang="ts">
-defineProps<{
+withDefaults(defineProps<{
   open: boolean
   title?: string
   message?: string
   loading?: boolean
-}>()
+  canPublish?: boolean
+  publishDisabledReason?: string
+  publishLabel?: string
+}>(), {
+  canPublish: true,
+  publishLabel: 'Salvar e postar na comunidade'
+})
 
 const emit = defineEmits<{ close: []; save: []; publish: [] }>()
 </script>
@@ -20,9 +26,11 @@ const emit = defineEmits<{ close: []; save: []; publish: [] }>()
         <div class="mt-5 flex flex-wrap justify-end gap-2">
           <AppButton type="button" variant="ghost" :disabled="loading" @click="emit('close')">Cancelar</AppButton>
           <AppButton type="button" variant="ghost" :loading="loading" @click="emit('save')">Salvar</AppButton>
-          <AppButton type="button" :loading="loading" @click="emit('publish')">Salvar e postar na comunidade</AppButton>
+          <AppButton v-if="canPublish" type="button" :loading="loading" @click="emit('publish')">{{ publishLabel }}</AppButton>
+          <p v-else class="max-w-xs rounded-lg border border-amber-300/25 bg-amber-300/10 px-3 py-2 text-xs font-bold leading-5 text-amber-100">{{ publishDisabledReason || 'Este conteudo ja esta em analise. Voce pode salvar alteracoes privadas, mas nao pode postar novamente agora.' }}</p>
         </div>
       </div>
     </div>
   </Teleport>
 </template>
+

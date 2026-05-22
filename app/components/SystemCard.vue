@@ -41,3 +41,4 @@ defineProps<{
     </div>
   </NuxtLink>
 </template>
+

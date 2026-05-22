@@ -229,3 +229,4 @@ async function toggleFeatured() {
     />
   </div>
 </template>
+

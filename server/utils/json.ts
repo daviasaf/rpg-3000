@@ -9,3 +9,4 @@ export function nullableJsonValue(value: unknown): Prisma.InputJsonValue | typeo
   if (value === null) return Prisma.JsonNull
   return jsonValue(value)
 }
+

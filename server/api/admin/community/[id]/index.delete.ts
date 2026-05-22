@@ -12,3 +12,4 @@ export default defineEventHandler(async (event) => {
   await prisma.communityPost.delete({ where: { id } })
   return { ok: true }
 })
+

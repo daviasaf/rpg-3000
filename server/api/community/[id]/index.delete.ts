@@ -25,3 +25,4 @@ export default defineEventHandler(async (event) => {
 
   return { ok: true, deletedPost: { id: post.id, title: post.title } }
 })
+

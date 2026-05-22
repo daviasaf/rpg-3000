@@ -30,8 +30,8 @@ export default defineEventHandler(async (event) => {
     const schema = snapshot.schemaJson || {}
     const system = await prisma.system.create({
       data: {
-        name: `${post.title} (copia)`,
-        slug: await createUniqueSlug(`${post.title} copia`),
+        name: post.title,
+        slug: await createUniqueSlug(`${post.title}-${user.id.slice(0, 6)}`),
         description: post.description || '',
         avatarUrl: post.avatarUrl,
         tags: post.tags,
@@ -72,7 +72,7 @@ export default defineEventHandler(async (event) => {
   if (post.type === 'NPC') {
     const npc = await prisma.npc.create({
       data: {
-        name: `${post.title} - copia`,
+        name: post.title,
         description: post.description,
         avatarUrl: post.avatarUrl,
         systemId: typeof snapshot.systemId === 'string' ? snapshot.systemId : null,
@@ -103,7 +103,7 @@ export default defineEventHandler(async (event) => {
     const dataJson = snapshot.dataJson || {}
     const character = await prisma.character.create({
       data: {
-        name: `${post.title} - copia`,
+        name: post.title,
         description: post.description,
         avatarUrl: post.avatarUrl,
         userId: user.id,
@@ -133,3 +133,4 @@ export default defineEventHandler(async (event) => {
 
   throw createError({ statusCode: 400, statusMessage: 'Tipo de publicacao invalido.' })
 })
+

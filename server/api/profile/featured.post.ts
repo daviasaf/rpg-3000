@@ -42,3 +42,4 @@ export default defineEventHandler(async (event) => {
   const character = await prisma.character.update({ where: { id: input.id }, data: { featuredOnProfile: input.featured } })
   return { featured: character.featuredOnProfile }
 })
+

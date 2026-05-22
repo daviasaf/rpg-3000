@@ -301,8 +301,10 @@ model Character {
   avatarUrl   String?
   userId      String
   user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  systemId    String
-  system      System                @relation(fields: [systemId], references: [id], onDelete: Restrict)
+  systemId    String?
+  system      System?               @relation(fields: [systemId], references: [id], onDelete: SetNull)
+  systemSnapshotJson Json?
+  systemRemovedAt DateTime?
   moderationStatus ModerationStatus @default(APPROVED)
   moderationReason String?
   featuredOnProfile Boolean @default(false)
@@ -540,3 +542,4 @@ model PrivateMessage {
   @@index([senderId, receiverId, createdAt])
   @@index([receiverId, senderId, createdAt])
 }
+

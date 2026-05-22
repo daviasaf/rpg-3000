@@ -10,3 +10,4 @@ import { Swords } from 'lucide-vue-next'
     </div>
   </div>
 </template>
+

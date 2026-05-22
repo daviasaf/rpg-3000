@@ -13,14 +13,9 @@ export default defineEventHandler(async (event) => {
   const systems = await withPrismaErrors(() => prisma.system.findMany({
     where: community
       ? { visibility: 'PUBLIC', moderationStatus: 'APPROVED' }
-      : mineOnly && user
+      : user
         ? { createdById: user.id }
-        : {
-          OR: [
-            { visibility: 'PUBLIC', moderationStatus: 'APPROVED' },
-            ...(user ? [{ createdById: user.id }] : [])
-          ]
-        },
+        : { visibility: 'PUBLIC', moderationStatus: 'APPROVED' },
     include: {
       createdBy: { select: { id: true, name: true, avatarUrl: true, profileColor: true } },
       fields: { orderBy: { order: 'asc' } },
@@ -37,3 +32,4 @@ export default defineEventHandler(async (event) => {
 
   return { systems }
 })
+

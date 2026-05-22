@@ -42,6 +42,7 @@ const schema = ref<SystemSchema>({
   levelProgression: data.value?.system.schemaJson?.levelProgression || [],
   leveling: {
     levelOneAttributePoints: data.value?.system.schemaJson?.leveling?.levelOneAttributePoints ?? 6,
+    initialLevel: data.value?.system.schemaJson?.leveling?.initialLevel ?? 0,
     attributesPerLevel: data.value?.system.schemaJson?.leveling?.attributesPerLevel ?? 1,
     levelOneAttributeLimit: data.value?.system.schemaJson?.leveling?.levelOneAttributeLimit ?? 5,
     attributeLimitIncreasePerLevel: data.value?.system.schemaJson?.leveling?.attributeLimitIncreasePerLevel ?? 1,
@@ -51,11 +52,13 @@ const schema = ref<SystemSchema>({
 })
 const fields = ref<DynamicField[]>((data.value?.system.fields || []).map((field, index) => ({ ...field, order: field.order ?? index })))
 const isRejected = computed(() => data.value?.system.moderationStatus === 'REJECTED')
+const isPending = computed(() => data.value?.system.moderationStatus === 'PENDING')
 
 async function submit(publish = false) {
   if (isRejected.value) return
   formErrors.value = validateDraft()
   if (formErrors.value.length) {
+    saveIntentOpen.value = false
     push('Corrija os pontos destacados antes de salvar o sistema.', 'error')
     return
   }
@@ -162,6 +165,23 @@ function validateDraft() {
     if (field.type === 'NUMBER' && Number.isNaN(Number(field.defaultValue ?? 0))) errors.push(`${fieldName}: valor padrao precisa ser numerico.`)
   })
 
+  const generatedFieldKeys = new Set(fields.value.map((field) => keyFromLabel(field.key || field.label || '')))
+  const classKeys = new Set<string>()
+  ;(schema.value.classes || []).forEach((rpgClass) => {
+    const className = rpgClass.name?.trim() || 'Classe'
+    const key = keyFromLabel(rpgClass.key || rpgClass.name || '')
+    if (!key || key.length < 2) errors.push(`${className}: informe uma chave tecnica com pelo menos 2 caracteres.`)
+    if (classKeys.has(key)) errors.push(`${className}: a chave da classe esta repetida.`)
+    classKeys.add(key)
+    if (!rpgClass.maxLevel || Number(rpgClass.maxLevel) < 1) errors.push(`${className}: informe pelo menos 1 nivel.`)
+    rpgClass.levels.forEach((level) => {
+      level.changes.forEach((change) => {
+        if (!isClassChangeTargetValid(change, generatedFieldKeys)) errors.push(`${className} nivel ${level.level}: escolha um alvo valido para a alteracao.`)
+        if (change.operation === 'NOTE' && !change.note?.trim()) errors.push(`${className} nivel ${level.level}: escreva o texto que deve aparecer na ficha.`)
+      })
+    })
+  })
+
   return errors
 }
 
@@ -188,8 +208,36 @@ function normalizeOptions(options: unknown) {
   return []
 }
 
+function isClassChangeTargetValid(change: { operation?: string; type?: string; targetKey?: string }, fieldKeys: Set<string>) {
+  if (change.operation === 'NOTE') return true
+  if (change.type === 'ATTRIBUTE_POINT') return (schema.value.sheetTabs || []).some((tab) => tab.type === 'ATTRIBUTES' && (tab.records || []).length)
+  if (change.type === 'DAMAGE_RECEIVED' || formulaKeyFromAny(change.targetKey) === 'DANO_RECEBIDO') return true
+  const key = keyFromLabel(change.targetKey || '')
+  return Boolean(key && fieldKeys.has(key))
+}
+
+function formulaKeyFromAny(value: unknown) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/(^_|_$)/g, '')
+}
+
+function normalizeItemQuantities(tab: NonNullable<SystemSchema['sheetTabs']>[number]) {
+  if (tab.type !== 'ITEMS') return tab
+  return {
+    ...tab,
+    records: (tab.records || []).map((record) => ({
+      ...record,
+      quantity: Math.max(1, Number(record.quantity || 1))
+    }))
+  }
+}
+
 function normalizeSchema(currentSchema: SystemSchema, currentFields: DynamicField[]) {
-  const normalizedTabs = normalizeSheetTabs(currentSchema)
+  const normalizedTabs = normalizeSheetTabs(currentSchema).map(normalizeItemQuantities)
   const normalizedFields = fieldsFromSheetTabs(normalizedTabs, currentFields)
   const targetLabels = new Map(normalizedFields.map((field) => [field.key, field.label]))
   const rulesMarkdown = normalizedTabs
@@ -238,6 +286,7 @@ function normalizeSchema(currentSchema: SystemSchema, currentFields: DynamicFiel
       .filter((item) => item.key && item.name),
     leveling: {
       levelOneAttributePoints: Math.max(0, Math.min(200, Number(currentSchema.leveling?.levelOneAttributePoints ?? 6))),
+      initialLevel: Math.max(0, Math.min(100, Number(currentSchema.leveling?.initialLevel ?? 0))),
       attributesPerLevel: Math.max(0, Math.min(100, Number(currentSchema.leveling?.attributesPerLevel ?? 1))),
       levelOneAttributeLimit: Math.max(1, Math.min(100, Number(currentSchema.leveling?.levelOneAttributeLimit ?? 5))),
       attributeLimitIncreasePerLevel: Math.max(0, Math.min(100, Number(currentSchema.leveling?.attributeLimitIncreasePerLevel ?? 1))),
@@ -245,15 +294,17 @@ function normalizeSchema(currentSchema: SystemSchema, currentFields: DynamicFiel
     },
     levelProgression: (currentSchema.levelProgression || []).map((level, index) => ({
       id: level.id || `level_rule_${index + 1}`,
-      level: Math.max(1, Math.min(100, Number(level.level || index + 1))),
+      level: Math.max(0, Math.min(100, Number(level.level ?? index))),
       attributeBudget: Math.max(0, Math.min(200, Number(level.attributeBudget ?? level.attributePoints ?? 0))),
       attributePoints: Math.max(0, Math.min(200, Number(level.attributePoints || 0))),
       skillChoices: Math.max(0, Math.min(100, Number(level.skillChoices || 0))),
       powerChoices: Math.max(0, Math.min(100, Number(level.powerChoices || 0))),
-      traitChoices: 0,
-      itemChoices: 0,
-      weaponChoices: 0,
+      traitChoices: Math.max(0, Math.min(100, Number(level.traitChoices || 0))),
+      itemChoices: Math.max(0, Math.min(100, Number(level.itemChoices || 0))),
+      weaponChoices: Math.max(0, Math.min(100, Number(level.weaponChoices || 0))),
       inventoryCapacity: Math.max(0, Math.min(10000, Number(level.inventoryCapacity || 0))),
+      effects: level.effects || [],
+      tables: level.tables || [],
       notes: level.notes?.trim() || ''
     })),
     classes: (currentSchema.classes || []).map((rpgClass, classIndex) => ({
@@ -272,11 +323,13 @@ function normalizeSchema(currentSchema: SystemSchema, currentFields: DynamicFiel
         weaponChoices: Math.max(0, Number(level.weaponChoices || 0)),
         inventoryCapacity: Math.max(0, Number(level.inventoryCapacity || 0)),
         changes: level.changes.map((change) => ({
-          targetKey: change.operation === 'NOTE' ? undefined : keyFromLabel(change.targetKey || ''),
-          targetLabel: change.operation === 'NOTE' ? undefined : targetLabels.get(keyFromLabel(change.targetKey || '')) || change.targetLabel || change.targetKey,
+          targetKey: change.operation === 'NOTE' ? undefined : change.type === 'ATTRIBUTE_POINT' ? 'ATTRIBUTE_POINT' : change.type === 'DAMAGE_RECEIVED' ? 'DANO_RECEBIDO' : keyFromLabel(change.targetKey || ''),
+          targetLabel: change.type === 'ATTRIBUTE_POINT' ? 'Ponto livre de atributo' : change.type === 'DAMAGE_RECEIVED' ? 'Dano recebido' : change.operation === 'NOTE' ? undefined : targetLabels.get(keyFromLabel(change.targetKey || '')) || change.targetLabel || change.targetKey,
           operation: change.operation,
           value: Number(change.value || 0),
-          note: change.note?.trim() || ''
+          note: change.note?.trim() || '',
+          type: change.type,
+          choiceCount: change.type === 'ATTRIBUTE_POINT' ? Math.max(1, Number(change.choiceCount || change.value || 1)) : change.choiceCount
         }))
       }))
     }))
@@ -337,9 +390,12 @@ function keyFromLabel(label: string) {
       title="Salvar sistema"
       message="Salvar cria uma versao pessoal/privada. Salvar e postar cria um snapshot para analise; se este sistema ja estava aprovado, a versao aprovada antiga continua publica."
       :loading="loading"
+      :can-publish="!isPending && !isRejected"
+      publish-disabled-reason="Este sistema ja esta em analise. Salve alteracoes privadas ou aguarde a revisao antes de postar novamente."
       @close="saveIntentOpen = false"
       @save="submit(false)"
       @publish="submit(true)"
     />
   </div>
 </template>
+

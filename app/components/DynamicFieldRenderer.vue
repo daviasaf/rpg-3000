@@ -49,3 +49,4 @@ const options = computed(() => {
     <input v-else :value="String(modelValue ?? '')" :readonly="readonly" class="input" @input="update(($event.target as HTMLInputElement).value)">
   </label>
 </template>
+

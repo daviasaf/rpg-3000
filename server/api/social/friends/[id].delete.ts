@@ -27,3 +27,4 @@ export default defineEventHandler(async (event) => {
   await prisma.friendRequest.delete({ where: { id: friendship.id } })
   return { ok: true }
 })
+

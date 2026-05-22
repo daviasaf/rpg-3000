@@ -106,3 +106,4 @@ npm run prisma:seed
 npm run dev
 npm run build
 ```
+

@@ -15,3 +15,4 @@ export default defineEventHandler(async (event) => {
   await prisma.profileLike.create({ data: { postId, userId: user.id } })
   return { liked: true }
 })
+

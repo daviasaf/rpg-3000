@@ -25,5 +25,21 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Voce nao tem acesso a esta ficha.' })
   }
 
-  return { character }
+  return { character: withSystemFallback(character) }
 })
+
+function withSystemFallback(character: any) {
+  if (character.system) return character
+  const snapshot = character.systemSnapshotJson as any
+  return {
+    ...character,
+    system: {
+      id: null,
+      name: snapshot?.name || character.dataJson?.__meta?.systemName || 'Sistema removido',
+      slug: '',
+      schemaJson: snapshot?.schemaJson || character.dataJson?.__meta?.systemSnapshot?.schemaJson || {},
+      fields: Array.isArray(snapshot?.fields) ? snapshot.fields : [],
+      unavailable: true
+    }
+  }
+}

@@ -17,3 +17,4 @@ export default defineEventHandler(async (event) => {
   await prisma.systemLike.create({ data: { systemId, userId: user.id } })
   return { liked: true }
 })
+

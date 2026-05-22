@@ -33,6 +33,9 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'NPC rejeitado nao pode ser editado. Crie uma nova versao para enviar novamente.' })
   }
 
+  const hasApprovedCommunityPost = await prisma.communityPost.count({ where: { originalNpcId: id, status: 'APPROVED' } })
+  const shouldReturnToReview = Boolean(hasApprovedCommunityPost || (npc.isCommunity && npc.moderationStatus === 'APPROVED'))
+
   const updated = await prisma.npc.update({
     where: { id },
     data: {
@@ -41,8 +44,9 @@ export default defineEventHandler(async (event) => {
       avatarUrl: input.avatarUrl === '' ? null : input.avatarUrl,
       systemId: input.systemId === undefined ? undefined : input.systemId || null,
       isCommunity: input.isCommunity,
-      moderationStatus: input.isCommunity === true ? 'PENDING' : input.isCommunity === false ? 'APPROVED' : undefined,
-      moderationReason: input.isCommunity === true || input.isCommunity === false ? null : undefined,
+      moderationStatus: input.isCommunity === true || shouldReturnToReview ? 'PENDING' : input.isCommunity === false ? 'APPROVED' : undefined,
+      moderationReason: input.isCommunity === true || input.isCommunity === false || shouldReturnToReview ? null : undefined,
+      featuredOnProfile: shouldReturnToReview ? false : undefined,
       dataJson: input.dataJson === undefined ? undefined : jsonValue(input.dataJson)
     },
     include: {
@@ -58,3 +62,4 @@ export default defineEventHandler(async (event) => {
 
   return { npc: updated }
 })
+

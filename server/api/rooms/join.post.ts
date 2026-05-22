@@ -62,3 +62,4 @@ export default defineEventHandler(async (event) => {
 function compatibleSystem(characterSystemId: string, schema: Record<string, any>, roomSystemId: string) {
   return characterSystemId === roomSystemId || schema?.provenance?.sourceSystemId === roomSystemId
 }
+

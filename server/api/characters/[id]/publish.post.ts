@@ -12,6 +12,7 @@ export default defineEventHandler(async (event) => {
 
   if (!character) throw createError({ statusCode: 404, statusMessage: 'Personagem nao encontrado.' })
   if (character.userId !== user.id) throw createError({ statusCode: 403, statusMessage: 'Voce so pode publicar seus personagens.' })
+  if (character.moderationStatus === 'PENDING') throw createError({ statusCode: 403, statusMessage: 'Este conteudo ainda esta em analise. Voce pode editar ou apagar, mas nao pode publicar novamente ate ser aprovado.' })
   if (character.moderationStatus === 'REJECTED') throw createError({ statusCode: 403, statusMessage: 'Personagem rejeitado nao pode ser republicado por edicao. Crie uma nova versao.' })
   const meta = (character.dataJson as Record<string, any>)?.__meta
   if (meta?.originalCreatorId && meta.originalCreatorId !== user.id) {
@@ -29,3 +30,4 @@ export default defineEventHandler(async (event) => {
   const post = await publishCharacterSnapshot(id, user.id)
   return { post }
 })
+

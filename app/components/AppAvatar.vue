@@ -55,3 +55,4 @@ watch(() => props.src, () => {
     <span v-else>{{ initials }}</span>
   </span>
 </template>
+

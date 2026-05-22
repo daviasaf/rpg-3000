@@ -42,7 +42,14 @@ export default defineEventHandler(async (event) => {
       tags: input.tags,
       visibility: input.visibility,
       moderationStatus: input.visibility === 'PUBLIC' ? 'PENDING' : 'APPROVED',
-      schemaJson: jsonValue(input.schemaJson),
+      schemaJson: jsonValue({
+        ...(input.schemaJson as Record<string, unknown>),
+        provenance: {
+          ...((input.schemaJson as Record<string, any>).provenance || {}),
+          originalCreatorId: user.id,
+          originalCreatorName: user.name
+        }
+      }),
       createdById: user.id,
       fields: {
         create: input.fields.map((field, index) => ({
@@ -66,3 +73,4 @@ export default defineEventHandler(async (event) => {
 
   return { system }
 })
+

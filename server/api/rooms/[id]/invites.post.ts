@@ -73,3 +73,4 @@ export default defineEventHandler(async (event) => {
 
   return { invited: recipients.length }
 })
+

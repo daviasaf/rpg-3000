@@ -13,3 +13,4 @@ export default defineEventHandler(async (event) => {
   await prisma.systemComment.delete({ where: { id } })
   return { ok: true }
 })
+
