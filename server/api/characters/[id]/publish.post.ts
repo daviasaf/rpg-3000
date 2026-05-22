@@ -13,6 +13,17 @@ export default defineEventHandler(async (event) => {
   if (!character) throw createError({ statusCode: 404, statusMessage: 'Personagem nao encontrado.' })
   if (character.userId !== user.id) throw createError({ statusCode: 403, statusMessage: 'Voce so pode publicar seus personagens.' })
   if (character.moderationStatus === 'REJECTED') throw createError({ statusCode: 403, statusMessage: 'Personagem rejeitado nao pode ser republicado por edicao. Crie uma nova versao.' })
+  const meta = (character.dataJson as Record<string, any>)?.__meta
+  if (meta?.originalCreatorId && meta.originalCreatorId !== user.id) {
+    await prisma.privateMessage.create({
+      data: {
+        senderId: user.id,
+        receiverId: meta.originalCreatorId,
+        content: `Fiz uma versao do personagem "${character.name}" que voce criou, mas preciso da sua autorizacao para postar. Visualize: /app/characters/${character.id}`
+      }
+    })
+    throw createError({ statusCode: 403, statusMessage: 'Pedido de autorizacao enviado ao criador original antes da publicacao.' })
+  }
 
   await prisma.character.update({ where: { id }, data: { moderationStatus: 'PENDING', moderationReason: null } })
   const post = await publishCharacterSnapshot(id, user.id)

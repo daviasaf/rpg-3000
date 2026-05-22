@@ -245,6 +245,22 @@ function entries(record: unknown) {
   return Object.entries(record as Record<string, unknown>).filter(([, value]) => !Array.isArray(value) && typeof value !== 'object')
 }
 
+function snapshotSchema(post: AdminPost) {
+  return post.snapshotJson?.schemaJson || post.snapshotJson?.system?.schemaJson || null
+}
+
+function snapshotFields(post: AdminPost) {
+  return Array.isArray(post.snapshotJson?.fields)
+    ? post.snapshotJson.fields
+    : Array.isArray(post.snapshotJson?.system?.fields)
+      ? post.snapshotJson.system.fields
+      : []
+}
+
+function snapshotVersion(post: AdminPost) {
+  return post.snapshotJson?.version || post.snapshotJson?.schemaJson?.version || 'v1'
+}
+
 function maxValue(series?: SeriesPoint[]) {
   return Math.max(1, ...((series || []).map((item) => item.value)))
 }
@@ -563,18 +579,28 @@ function showChartLabel(index: number, total?: number) {
                     </div>
                   </div>
 
-                  <div v-if="isExpanded(post.id)" class="mt-4 grid gap-4 border-t border-white/10 pt-4 lg:grid-cols-2">
+                  <div v-if="isExpanded(post.id)" class="mt-4 grid gap-4 border-t border-white/10 pt-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(280px,0.7fr)]">
                     <div class="rounded-lg border border-white/10 bg-white/[0.035] p-3">
-                      <h4 class="font-black text-white">Conteudo publicado</h4>
-                      <dl class="mt-3 grid gap-3 text-sm">
+                      <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <h4 class="font-black text-white">Resumo para analise</h4>
+                          <p class="mt-1 text-sm text-mist">{{ post.description || 'Sem descricao.' }}</p>
+                        </div>
+                        <span class="kbd-chip">{{ snapshotVersion(post) }}</span>
+                      </div>
+                      <SystemStructurePreview
+                        v-if="post.type === 'SYSTEM'"
+                        class="mt-4"
+                        :schema="snapshotSchema(post)"
+                        :fields="snapshotFields(post)"
+                        compact
+                      />
+                      <dl v-else class="mt-3 grid gap-3 text-sm">
                         <div v-for="[key, value] in entries(post.snapshotJson?.dataJson || post.snapshotJson)" :key="key">
                           <dt class="label">{{ key }}</dt>
                           <dd class="break-words text-white">{{ value }}</dd>
                         </div>
                       </dl>
-                      <div v-if="Array.isArray(post.snapshotJson?.fields)" class="mt-4 max-h-64 space-y-2 overflow-y-auto pr-2">
-                        <p v-for="field in post.snapshotJson.fields" :key="field.key" class="rounded-md bg-white/[0.04] p-2 text-sm text-mist"><b class="text-white">{{ field.label }}</b> | {{ field.category }} | {{ field.type }} | padrao {{ field.defaultValue ?? '-' }}</p>
-                      </div>
                       <div v-if="Array.isArray(post.snapshotJson?.dataJson?.attacks)" class="mt-4 flex flex-wrap gap-2">
                         <span v-for="attack in post.snapshotJson.dataJson.attacks" :key="String(attack.name)" class="rounded-md border border-ember/25 bg-ember/10 px-2 py-1 text-xs font-bold text-ember">{{ attack.name }}: {{ attack.damage }}</span>
                       </div>

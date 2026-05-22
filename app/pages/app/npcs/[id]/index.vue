@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Heart, MessageCircle, PlusCircle } from 'lucide-vue-next'
+import { ArrowLeft, Edit3, Heart, MessageCircle, PlusCircle, Send, Star } from 'lucide-vue-next'
 
 definePageMeta({ layout: 'app', middleware: 'auth' })
 
@@ -16,6 +16,9 @@ const router = useRouter()
 const auth = useAuthStore()
 const { push, apiError } = useToast()
 const adding = ref(false)
+const publishOpen = ref(false)
+const publishing = ref(false)
+const featuring = ref(false)
 const comment = ref('')
 const commenting = ref(false)
 
@@ -27,6 +30,7 @@ const { data, refresh } = await useFetch<{ npc: {
   isCommunity: boolean
   moderationStatus?: string
   moderationReason?: string | null
+  featuredOnProfile?: boolean
   system?: { id: string; name: string } | null
   createdById?: string | null
   createdBy?: { id: string; name: string; avatarUrl?: string | null } | null
@@ -41,6 +45,23 @@ const isRejected = computed(() => data.value?.npc.moderationStatus === 'REJECTED
 const liked = computed(() => Boolean(data.value?.npc.likes?.length))
 const attacks = computed(() => Array.isArray(data.value?.npc.dataJson.attacks) ? data.value.npc.dataJson.attacks as Array<Record<string, unknown>> : [])
 const statEntries = computed(() => Object.entries(data.value?.npc.dataJson || {}).filter(([key, value]) => key !== 'attacks' && typeof value !== 'object'))
+
+function ownerActions() {
+  const npc = data.value?.npc
+  return [
+    { key: 'edit', label: 'Editar', icon: Edit3, disabled: isRejected.value },
+    { key: 'publish', label: npc?.moderationStatus === 'PENDING' ? 'Em analise' : 'Postar na comunidade', icon: Send, disabled: isRejected.value || npc?.moderationStatus === 'PENDING' || publishing.value },
+    { key: 'feature', label: npc?.featuredOnProfile ? 'Remover destaque' : 'Destacar no perfil', icon: Star, disabled: npc?.moderationStatus !== 'APPROVED' || featuring.value }
+  ]
+}
+
+async function handleOwnerAction(action: string) {
+  const npc = data.value?.npc
+  if (!npc) return
+  if (action === 'edit') await navigateTo(`/app/npcs/${npc.id}/edit`)
+  if (action === 'publish') publishOpen.value = true
+  if (action === 'feature') await toggleFeatured()
+}
 
 function goBack() {
   if (import.meta.client && window.history.length > 1) {
@@ -84,6 +105,40 @@ async function sendComment() {
     commenting.value = false
   }
 }
+
+async function publishNpc() {
+  const npc = data.value?.npc
+  if (!npc) return
+  publishing.value = true
+  try {
+    await $fetch(`/api/npcs/${npc.id}/publish`, { method: 'POST' })
+    push('NPC enviado para analise da comunidade.', 'success')
+    publishOpen.value = false
+    await refresh()
+  } catch (error) {
+    apiError(error, 'Nao foi possivel postar o NPC.')
+  } finally {
+    publishing.value = false
+  }
+}
+
+async function toggleFeatured() {
+  const npc = data.value?.npc
+  if (!npc) return
+  featuring.value = true
+  try {
+    const response = await $fetch<{ featured: boolean }>('/api/profile/featured', {
+      method: 'POST',
+      body: { type: 'NPC', id: npc.id, featured: !npc.featuredOnProfile }
+    })
+    npc.featuredOnProfile = response.featured
+    push(response.featured ? 'NPC destacado no perfil.' : 'Destaque removido do perfil.', 'success')
+  } catch (error) {
+    apiError(error, 'Nao foi possivel alterar o destaque.')
+  } finally {
+    featuring.value = false
+  }
+}
 </script>
 
 <template>
@@ -122,7 +177,7 @@ async function sendComment() {
             <AppButton v-if="!isOwner" variant="ghost" :loading="adding" @click="addToInventory">
               <PlusCircle class="h-4 w-4" />Adicionar ao inventario
             </AppButton>
-            <NuxtLink v-if="isOwner && !isRejected" :to="`/app/npcs/${data.npc.id}/edit`"><AppButton variant="ghost">Editar NPC</AppButton></NuxtLink>
+            <AppActionMenu v-if="isOwner" title="Acoes do NPC" :items="ownerActions()" @select="handleOwnerAction" />
           </div>
         </div>
       </div>
@@ -163,5 +218,14 @@ async function sendComment() {
         />
       </div>
     </AppCard>
+    <ConfirmModal
+      :open="publishOpen"
+      title="Postar NPC"
+      message="Uma copia do NPC sera enviada para analise da comunidade. Mudancas futuras no NPC pessoal nao alteram esse snapshot."
+      confirm-label="Postar"
+      :loading="publishing"
+      @close="publishOpen = false"
+      @confirm="publishNpc"
+    />
   </div>
 </template>

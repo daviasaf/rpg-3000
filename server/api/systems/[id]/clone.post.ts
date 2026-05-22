@@ -31,16 +31,29 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Este sistema nao pode ser adicionado.' })
   }
 
-  const name = source.name
+  const originalSchema = source.schemaJson as Record<string, any>
+  const name = `${source.name} - copia`
+  const originalCreator = source.createdById
   const system = await prisma.system.create({
     data: {
       name,
       slug: await createUniqueSlug(`${name}-${user.id.slice(0, 6)}`),
       description: source.description,
+      avatarUrl: source.avatarUrl,
       tags: source.tags,
       visibility: 'PRIVATE',
       moderationStatus: 'APPROVED',
-      schemaJson: jsonValue(source.schemaJson),
+      schemaJson: jsonValue({
+        ...originalSchema,
+        version: originalSchema.version || 'v1',
+        provenance: {
+          ...(originalSchema.provenance || {}),
+          sourceSystemId: source.id,
+          originalCreatorId: originalSchema.provenance?.originalCreatorId || originalCreator,
+          copiedById: user.id,
+          copiedAt: new Date().toISOString()
+        }
+      }),
       createdById: user.id,
       fields: {
         create: source.fields.map((field) => ({

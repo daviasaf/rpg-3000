@@ -27,6 +27,7 @@ export default defineEventHandler(async (event) => {
   const snapshot = post.snapshotJson as Record<string, any>
 
   if (post.type === 'SYSTEM') {
+    const schema = snapshot.schemaJson || {}
     const system = await prisma.system.create({
       data: {
         name: `${post.title} (copia)`,
@@ -37,7 +38,18 @@ export default defineEventHandler(async (event) => {
         visibility: 'PRIVATE',
         moderationStatus: 'APPROVED',
         createdById: user.id,
-        schemaJson: jsonValue(snapshot.schemaJson || {}),
+        schemaJson: jsonValue({
+          ...schema,
+          version: schema.version || snapshot.version || 'v1',
+          provenance: {
+            ...(schema.provenance || {}),
+            sourceSystemId: post.originalSystemId || snapshot.id || null,
+            originalCreatorId: post.authorId,
+            originalCreatorName: post.authorId ? undefined : null,
+            copiedById: user.id,
+            copiedAt: new Date().toISOString()
+          }
+        }),
         fields: {
           create: Array.isArray(snapshot.fields)
             ? snapshot.fields.map((field: Record<string, any>, index: number) => ({
@@ -60,14 +72,24 @@ export default defineEventHandler(async (event) => {
   if (post.type === 'NPC') {
     const npc = await prisma.npc.create({
       data: {
-        name: post.title,
+        name: `${post.title} - copia`,
         description: post.description,
         avatarUrl: post.avatarUrl,
         systemId: typeof snapshot.systemId === 'string' ? snapshot.systemId : null,
         isCommunity: false,
         moderationStatus: 'APPROVED',
         createdById: user.id,
-        dataJson: jsonValue(snapshot.dataJson || {})
+        dataJson: jsonValue({
+          ...(snapshot.dataJson || {}),
+          __meta: {
+            ...(snapshot.dataJson?.__meta || {}),
+            sourceNpcId: post.originalNpcId || snapshot.id || null,
+            originalCreatorId: post.authorId,
+            copiedById: user.id,
+            copiedAt: new Date().toISOString(),
+            version: snapshot.version || 'v1'
+          }
+        })
       }
     })
     return { npc }
@@ -81,12 +103,22 @@ export default defineEventHandler(async (event) => {
     const dataJson = snapshot.dataJson || {}
     const character = await prisma.character.create({
       data: {
-        name: post.title,
+        name: `${post.title} - copia`,
         description: post.description,
         avatarUrl: post.avatarUrl,
         userId: user.id,
         systemId,
-        dataJson: jsonValue(dataJson),
+        dataJson: jsonValue({
+          ...dataJson,
+          __meta: {
+            ...(dataJson.__meta || {}),
+            sourceCharacterId: post.originalCharacterId || snapshot.id || null,
+            originalCreatorId: post.authorId,
+            copiedById: user.id,
+            copiedAt: new Date().toISOString(),
+            version: snapshot.version || 'v1'
+          }
+        }),
         values: {
           create: Object.entries(dataJson).map(([key, value]) => ({
             key,

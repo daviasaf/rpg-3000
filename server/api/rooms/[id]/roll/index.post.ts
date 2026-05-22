@@ -7,6 +7,8 @@ import { diceRollSchema } from '../../../../utils/validation'
 import { jsonValue } from '../../../../utils/json'
 import { readZodBody } from '../../../../utils/body'
 import { assertActionCooldown } from '../../../../utils/rateLimit'
+import { characterFormulaValues, resolveFormulaExpression } from '~~/shared/utils/characterRules'
+import { normalizeSheetTabs } from '~~/shared/utils/sheetTabs'
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuth(event)
@@ -16,6 +18,7 @@ export default defineEventHandler(async (event) => {
   const input = await readZodBody(event, diceRollSchema)
 
   let characterName: string | null = null
+  let expression = input.expression
   if (input.characterId) {
     const member = await prisma.roomMember.findFirst({
       where: { roomId, characterId: input.characterId }
@@ -23,13 +26,25 @@ export default defineEventHandler(async (event) => {
     if (!member || (member.userId !== user.id && room.masterId !== user.id)) {
       throw createError({ statusCode: 403, statusMessage: 'Personagem indisponivel para rolagem.' })
     }
-    const character = await prisma.character.findUnique({ where: { id: input.characterId } })
+    const character = await prisma.character.findUnique({
+      where: { id: input.characterId },
+      include: { system: { include: { fields: true } } }
+    })
     characterName = character?.name ?? null
+    if (character) {
+      if (character.moderationStatus !== 'APPROVED' || character.system.moderationStatus !== 'APPROVED') {
+        throw createError({ statusCode: 403, statusMessage: 'Este conteudo ainda esta em analise e nao pode ser usado em sessoes.' })
+      }
+      const values = characterFormulaValues(character.system.fields as any, normalizeSheetTabs(character.system.schemaJson as any), character.dataJson as Record<string, unknown>)
+      const resolved = resolveFormulaExpression(input.expression, values)
+      if (resolved.missing) throw createError({ statusCode: 400, statusMessage: `Chave "${resolved.missing}" nao existe na ficha.` })
+      expression = compactDiceExpression(resolved.resolved)
+    }
   }
 
   let dice
   try {
-    dice = parseAndRollDice(input.expression, input.mode)
+    dice = parseAndRollDice(expression, input.mode)
   } catch (error) {
     throw createError({
       statusCode: 400,
@@ -80,6 +95,14 @@ export default defineEventHandler(async (event) => {
 
   return result
 })
+
+function compactDiceExpression(expression: string) {
+  const normalized = expression.replace(/\s+/g, '')
+  const match = normalized.match(/^(\d{1,3}d\d{1,4})(.*)$/i)
+  if (!match) return normalized
+  const modifier = (match[2] || '').match(/[+-]?\d+/g)?.reduce((sum, value) => sum + Number(value), 0) || 0
+  return `${match[1]}${modifier === 0 ? '' : modifier > 0 ? `+${modifier}` : modifier}`
+}
 
 function formatDiceResult(dice: ReturnType<typeof parseAndRollDice>) {
   const roll = dice.rolls[0]

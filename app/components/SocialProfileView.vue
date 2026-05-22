@@ -7,7 +7,7 @@ type ProfilePost = {
   comments: Array<{ id: string; content: string; createdAt: string; updatedAt?: string; user?: SocialUser | null }>
   _count?: { likes: number; comments: number }
 }
-type CreatedItem = { id: string; name: string; description?: string | null; avatarUrl?: string | null; moderationStatus?: string; system?: { name: string } | null }
+type CreatedItem = { id: string; name: string; description?: string | null; avatarUrl?: string | null; moderationStatus?: string; hasNewVersion?: boolean; system?: { name: string } | null }
 type CommentItem = { id: string; content: string; createdAt: string; updatedAt?: string | null; user?: SocialUser | null }
 
 const props = defineProps<{
@@ -74,7 +74,7 @@ function profileHandle(profile?: SocialUser) {
         <div class="mt-3 space-y-2">
           <NuxtLink v-for="item in systems" :key="item.id" :to="`/app/systems/${item.id}`" class="soft-row flex items-center gap-3 p-3">
             <AppAvatar :name="item.name" :src="item.avatarUrl" size="sm" />
-            <span class="min-w-0"><b class="block truncate text-white">{{ item.name }}</b><span class="line-clamp-1 text-xs text-mist">{{ item.description || 'Sem descricao.' }}</span></span>
+            <span class="min-w-0"><b class="block truncate text-white">{{ item.name }}</b><span class="line-clamp-1 text-xs text-mist">{{ item.description || 'Sem descricao.' }}</span><span v-if="item.hasNewVersion" class="mt-1 inline-flex rounded border border-ember/30 bg-ember/10 px-1.5 py-0.5 text-[10px] font-black text-ember">Nova versao disponivel</span></span>
           </NuxtLink>
           <p v-if="!systems?.length" class="text-sm text-mist">Nenhum sistema destacado.</p>
         </div>
@@ -84,7 +84,7 @@ function profileHandle(profile?: SocialUser) {
         <div class="mt-3 space-y-2">
           <NuxtLink v-for="item in npcs" :key="item.id" :to="`/app/npcs/${item.id}`" class="soft-row flex items-center gap-3 p-3">
             <AppAvatar :name="item.name" :src="item.avatarUrl" size="sm" />
-            <span class="min-w-0"><b class="block truncate text-white">{{ item.name }}</b><span class="line-clamp-1 text-xs text-mist">{{ item.description || 'Sem descricao.' }}</span></span>
+            <span class="min-w-0"><b class="block truncate text-white">{{ item.name }}</b><span class="line-clamp-1 text-xs text-mist">{{ item.description || 'Sem descricao.' }}</span><span v-if="item.hasNewVersion" class="mt-1 inline-flex rounded border border-ember/30 bg-ember/10 px-1.5 py-0.5 text-[10px] font-black text-ember">Nova versao disponivel</span></span>
           </NuxtLink>
           <p v-if="!npcs?.length" class="text-sm text-mist">Nenhum NPC destacado.</p>
         </div>
@@ -94,7 +94,7 @@ function profileHandle(profile?: SocialUser) {
         <div class="mt-3 space-y-2">
           <NuxtLink v-for="item in characters" :key="item.id" :to="`/app/characters/${item.id}`" class="soft-row flex items-center gap-3 p-3">
             <AppAvatar :name="item.name" :src="item.avatarUrl" size="sm" />
-            <span class="min-w-0"><b class="block truncate text-white">{{ item.name }}</b><span class="line-clamp-1 text-xs text-mist">{{ item.system?.name || item.description || 'Sem sistema.' }}</span></span>
+            <span class="min-w-0"><b class="block truncate text-white">{{ item.name }}</b><span class="line-clamp-1 text-xs text-mist">{{ item.system?.name || item.description || 'Sem sistema.' }}</span><span v-if="item.hasNewVersion" class="mt-1 inline-flex rounded border border-ember/30 bg-ember/10 px-1.5 py-0.5 text-[10px] font-black text-ember">Nova versao disponivel</span></span>
           </NuxtLink>
           <p v-if="!characters?.length" class="text-sm text-mist">Nenhum personagem destacado.</p>
         </div>

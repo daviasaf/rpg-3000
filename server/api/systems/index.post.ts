@@ -7,6 +7,7 @@ import { jsonValue, nullableJsonValue } from '../../utils/json'
 import { readZodBody } from '../../utils/body'
 import { withPrismaErrors } from '../../utils/prismaErrors'
 import { publishSystemSnapshot } from '../../utils/community'
+import { validateSystemRules } from '~~/shared/utils/characterRules'
 
 async function createUniqueSlug(name: string) {
   const base = slugify(name) || 'sistema'
@@ -26,6 +27,10 @@ export default defineEventHandler(async (event) => {
 
   if (keys.size !== input.fields.length) {
     throw createError({ statusCode: 400, statusMessage: 'As chaves dos campos precisam ser unicas.' })
+  }
+  const ruleErrors = validateSystemRules(input.schemaJson as any, input.fields as any)
+  if (ruleErrors.length) {
+    throw createError({ statusCode: 400, statusMessage: ruleErrors[0], data: { errors: ruleErrors } })
   }
 
   const system = await withPrismaErrors(async () => prisma.system.create({

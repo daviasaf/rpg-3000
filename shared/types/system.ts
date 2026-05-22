@@ -70,6 +70,7 @@ export interface SheetTabField {
 export interface SheetTabRecord {
   id?: string
   name: string
+  key?: string
   description?: string
   text?: string
   value?: number | string
@@ -77,15 +78,26 @@ export interface SheetTabRecord {
   max?: number | null
   relatedAttribute?: string
   damage?: string
+  weight?: number | null
   roll?: string
   cost?: string
   range?: string
   ability?: string
   bonus?: string
+  bonusKey?: string
   effect?: string
   quantity?: number | null
   fields?: Record<string, unknown>
   extraFields?: Array<{ id?: string; name: string; value: string }>
+  useSkillLevels?: boolean
+  skillLevels?: SkillLevelOption[]
+}
+
+export interface SkillLevelOption {
+  id?: string
+  name: string
+  key: string
+  value: number
 }
 
 export interface SheetTab {
@@ -142,6 +154,7 @@ export interface SystemSchema {
     allowExtras?: boolean
   }>
   sheetTabs?: SheetTab[]
+  levelProgression?: SystemLevelRule[]
   leveling?: {
     attributesPerLevel?: number
     levelOneAttributeLimit?: number
@@ -150,6 +163,22 @@ export interface SystemSchema {
     levelOneAttributePoints?: number
   }
   classes?: SystemClass[]
+}
+
+export interface SystemLevelRule {
+  id?: string
+  level: number
+  attributeBudget?: number
+  attributePoints?: number
+  skillChoices?: number
+  powerChoices?: number
+  traitChoices?: number
+  itemChoices?: number
+  weaponChoices?: number
+  inventoryCapacity?: number
+  resourceGains?: Array<{ key: string; value: number; note?: string }>
+  bonusGains?: Array<{ name: string; key?: string; value: number; note?: string }>
+  notes?: string
 }
 
 export interface SystemClassLevelChange {
@@ -162,6 +191,13 @@ export interface SystemClassLevelChange {
 
 export interface SystemClassLevel {
   level: number
+  description?: string
+  skillChoices?: number
+  powerChoices?: number
+  traitChoices?: number
+  itemChoices?: number
+  weaponChoices?: number
+  inventoryCapacity?: number
   changes: SystemClassLevelChange[]
 }
 

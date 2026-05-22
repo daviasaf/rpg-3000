@@ -25,6 +25,7 @@ const props = withDefaults(defineProps<{
 const { push, apiError } = useToast()
 const { data: systems } = await useFetch<{ systems: Array<{ id: string; name: string }> }>('/api/systems')
 const loading = ref(false)
+const saveIntentOpen = ref(false)
 const isRejected = computed(() => props.npc?.moderationStatus === 'REJECTED')
 
 const form = reactive({
@@ -61,7 +62,7 @@ function removeAttack(index: number) {
   form.attacks.splice(index, 1)
 }
 
-async function submit() {
+async function submit(publish = false) {
   if (isRejected.value) return
   loading.value = true
   try {
@@ -70,7 +71,7 @@ async function submit() {
       description: form.description,
       avatarUrl: form.avatarUrl,
       systemId: form.systemId || null,
-      isCommunity: form.isCommunity,
+      isCommunity: publish,
       dataJson: {
         vida: form.vida,
         ataque: form.ataque,
@@ -80,17 +81,18 @@ async function submit() {
 
     if (props.mode === 'edit' && props.npc?.id) {
       await $fetch(`/api/npcs/${props.npc.id}`, { method: 'PUT', body })
-      push('NPC atualizado.', 'success')
+      push(publish ? 'NPC salvo e enviado para analise.' : 'NPC salvo.', 'success')
       await navigateTo(`/app/npcs/${props.npc.id}`)
     } else {
       await $fetch('/api/npcs', { method: 'POST', body })
-      push(form.isCommunity ? 'NPC enviado para analise.' : 'NPC criado.', 'success')
+      push(publish ? 'NPC salvo e enviado para analise.' : 'NPC salvo.', 'success')
       await navigateTo('/app/npcs')
     }
   } catch (error) {
     apiError(error, props.mode === 'edit' ? 'Nao foi possivel editar NPC.' : 'Nao foi possivel criar NPC.')
   } finally {
     loading.value = false
+    saveIntentOpen.value = false
   }
 }
 </script>
@@ -113,14 +115,13 @@ async function submit() {
     </AppCard>
 
     <AppCard>
-      <form class="grid gap-4 md:grid-cols-2 xl:grid-cols-4" @submit.prevent="submit">
+      <form class="grid gap-4 md:grid-cols-2 xl:grid-cols-4" @submit.prevent="saveIntentOpen = true">
         <label><span class="label">Nome *</span><input v-model="form.name" class="input" type="text" :disabled="isRejected"></label>
         <label><span class="label">Sistema</span><select v-model="form.systemId" class="select" :disabled="isRejected"><option value="">{{ systems?.systems.length ? 'Generico' : 'Nenhum sistema criado ainda' }}</option><option v-for="system in systems?.systems" :key="system.id" :value="system.id">{{ system.name }}</option></select></label>
         <label><span class="label">Vida *</span><input v-model.number="form.vida" class="input" type="number" :disabled="isRejected"></label>
         <label><span class="label">Ataque *</span><input v-model.number="form.ataque" class="input" type="number" :disabled="isRejected"></label>
         <label class="md:col-span-2"><span class="label">Avatar por URL</span><input v-model="form.avatarUrl" class="input" type="url" placeholder="https://..." :disabled="isRejected"></label>
         <label class="md:col-span-2"><span class="label">Descricao</span><input v-model="form.description" class="input" type="text" :disabled="isRejected"></label>
-        <label class="flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-3"><input v-model="form.isCommunity" type="checkbox" class="h-4 w-4 accent-ember" :disabled="isRejected"><span class="font-bold text-white">Publicar na comunidade</span></label>
         <div class="md:col-span-2 xl:col-span-4">
           <div class="mb-2 flex items-center justify-between gap-3">
             <h2 class="font-black text-white">Ataques especificos</h2>
@@ -144,5 +145,14 @@ async function submit() {
         </div>
       </form>
     </AppCard>
+    <SavePublishModal
+      :open="saveIntentOpen"
+      title="Salvar NPC"
+      message="Salvar mantem o NPC no seu inventario. Salvar e postar cria um snapshot para analise da comunidade."
+      :loading="loading"
+      @close="saveIntentOpen = false"
+      @save="submit(false)"
+      @publish="submit(true)"
+    />
   </div>
 </template>

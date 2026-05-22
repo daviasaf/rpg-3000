@@ -166,6 +166,7 @@ export const createSystemSchema = z.object({
         records: z.array(z.object({
           id: z.string().optional(),
           name: z.string().trim().min(1).max(100),
+          key: z.string().trim().min(1).max(64).regex(/^[a-zA-Z0-9_/-]+$/, 'Use apenas letras, numeros, hifen, barra ou underline.').optional(),
           description: z.string().trim().max(1200).optional(),
           text: z.string().trim().max(4000).optional(),
           value: z.union([z.number(), z.string()]).optional(),
@@ -173,11 +174,13 @@ export const createSystemSchema = z.object({
           max: z.number().nullable().optional(),
           relatedAttribute: z.string().trim().max(80).optional(),
           damage: z.string().trim().max(80).optional(),
+          weight: z.number().min(0).max(10000).nullable().optional(),
           roll: z.string().trim().max(120).optional(),
           cost: z.string().trim().max(80).optional(),
           range: z.string().trim().max(80).optional(),
           ability: z.string().trim().max(160).optional(),
           bonus: z.string().trim().max(240).optional(),
+          bonusKey: z.string().trim().max(64).optional(),
           effect: z.string().trim().max(1200).optional(),
           quantity: z.number().nullable().optional(),
           fields: z.record(z.unknown()).optional(),
@@ -185,9 +188,31 @@ export const createSystemSchema = z.object({
             id: z.string().optional(),
             name: z.string().trim().max(80),
             value: z.string().trim().max(240)
-          })).max(40).optional()
+          })).max(40).optional(),
+          useSkillLevels: z.boolean().optional(),
+          skillLevels: z.array(z.object({
+            id: z.string().optional(),
+            name: z.string().trim().min(1).max(80),
+            key: z.string().trim().min(1).max(64),
+            value: z.number().min(-1000).max(1000)
+          })).max(20).optional()
         })).max(200).optional()
       })).max(60).optional(),
+      levelProgression: z.array(z.object({
+        id: z.string().optional(),
+        level: z.number().int().min(1).max(100),
+        attributeBudget: z.number().int().min(0).max(200).optional(),
+        attributePoints: z.number().int().min(0).max(200).optional(),
+        skillChoices: z.number().int().min(0).max(100).optional(),
+        powerChoices: z.number().int().min(0).max(100).optional(),
+        traitChoices: z.number().int().min(0).max(100).optional(),
+        itemChoices: z.number().int().min(0).max(100).optional(),
+        weaponChoices: z.number().int().min(0).max(100).optional(),
+        inventoryCapacity: z.number().int().min(0).max(10000).optional(),
+        resourceGains: z.array(z.object({ key: z.string().trim().max(64), value: z.number(), note: z.string().trim().max(240).optional() })).max(40).optional(),
+        bonusGains: z.array(z.object({ name: z.string().trim().max(80), key: z.string().trim().max(64).optional(), value: z.number(), note: z.string().trim().max(240).optional() })).max(40).optional(),
+        notes: z.string().trim().max(600).optional()
+      })).max(100).optional(),
       leveling: z.object({
         attributesPerLevel: z.number().int().min(0).max(100).default(1).optional(),
         levelOneAttributeLimit: z.number().int().min(1).max(100).default(5).optional(),
@@ -203,6 +228,13 @@ export const createSystemSchema = z.object({
         maxLevel: z.number().int().min(1).max(100).default(20),
         levels: z.array(z.object({
           level: z.number().int().min(1).max(100),
+          description: z.string().trim().max(600).optional(),
+          skillChoices: z.number().int().min(0).max(100).optional(),
+          powerChoices: z.number().int().min(0).max(100).optional(),
+          traitChoices: z.number().int().min(0).max(100).optional(),
+          itemChoices: z.number().int().min(0).max(100).optional(),
+          weaponChoices: z.number().int().min(0).max(100).optional(),
+          inventoryCapacity: z.number().int().min(0).max(10000).optional(),
           changes: z.array(z.object({
             targetKey: z.string().trim().max(64).optional(),
             targetLabel: z.string().trim().min(1).max(80).optional(),

@@ -62,7 +62,11 @@ function typeIcon(type: CommunityPost['type']) {
 }
 
 function postActionItems(post: CommunityPost) {
-  return [
+  const items: Array<{ key: string; label: string; icon: any; danger?: boolean; disabled?: boolean }> = [
+    { key: 'details', label: 'Visualizar detalhes', icon: ScrollText },
+    { key: 'copy', label: 'Gerar uma copia', icon: PlusCircle, disabled: addingId.value === post.id }
+  ]
+  if (post.author?.id === auth.user?.id) items.push(
     {
       key: 'delete',
       label: deletingId.value === post.id ? 'Apagando...' : 'Apagar publicacao',
@@ -70,7 +74,8 @@ function postActionItems(post: CommunityPost) {
       danger: true,
       disabled: deletingId.value === post.id
     }
-  ]
+  )
+  return items
 }
 
 function postUrl(post: CommunityPost) {
@@ -81,9 +86,20 @@ function postUrl(post: CommunityPost) {
 }
 
 function handlePostAction(post: CommunityPost, action: string) {
+  if (action === 'details') {
+    const url = postUrl(post)
+    if (url) navigateTo(url)
+  }
+  if (action === 'copy') {
+    void clonePost(post.id, post.type)
+  }
   if (action === 'delete') {
     pendingDeletePost.value = post
   }
+}
+
+function postVersion(post: CommunityPost) {
+  return post.snapshotJson?.version || post.snapshotJson?.schemaJson?.version || 'v1'
 }
 
 async function like(id: string) {
@@ -168,18 +184,21 @@ async function deletePost() {
             </NuxtLink>
             <span v-else class="mt-1 block text-xl font-black text-white hover:text-ember">{{ post.title }}</span>
             <p class="mt-2 line-clamp-2 max-w-3xl text-sm leading-6 text-mist">{{ post.description || 'Sem descricao.' }}</p>
-            <p class="mt-2 text-xs text-mist">{{ post.systemName || 'Generico' }} - por {{ post.author?.name || 'Usuario removido' }}</p>
+            <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-mist">
+              <span>{{ post.systemName || 'Generico' }}</span>
+              <span class="kbd-chip">{{ postVersion(post) }}</span>
+              <NuxtLink v-if="post.author?.id" :to="`/app/profile/${post.author.id}`" class="inline-flex items-center gap-1 hover:text-white" @click.stop>
+                <AppAvatar :name="post.author.name" :src="post.author.avatarUrl" :color="post.author.profileColor" size="sm" rounded="full" />
+                Criado por {{ post.author.name }}
+              </NuxtLink>
+              <span v-else>Autor removido</span>
+            </div>
           </div>
           <div class="flex flex-wrap items-start gap-2">
             <AppButton v-if="post.author?.id !== auth.user?.id" variant="ghost" :loading="addingId === post.id" @click="clonePost(post.id, post.type)">
               <PlusCircle class="h-4 w-4" />Adicionar
             </AppButton>
-            <AppActionMenu
-              v-else
-              title="Acoes da publicacao"
-              :items="postActionItems(post)"
-              @select="handlePostAction(post, $event)"
-            />
+            <AppActionMenu title="Acoes da publicacao" :items="postActionItems(post)" @select="handlePostAction(post, $event)" />
             <button type="button" class="grid h-10 w-10 place-items-center rounded-lg border border-white/10 text-ember transition hover:bg-white/10" :title="isOpen(post.id) ? 'Minimizar' : 'Expandir'" @click="toggle(post.id)">
               <ChevronDown class="h-6 w-6 transition" :class="isOpen(post.id) ? 'rotate-180' : ''" />
             </button>

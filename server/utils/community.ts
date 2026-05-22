@@ -56,6 +56,7 @@ export async function publishSystemSnapshot(systemId: string, authorId: string) 
     systemName: system.name,
     snapshotJson: {
       id: system.id,
+      version: (system.schemaJson as Record<string, unknown>)?.version || 'v1',
       name: system.name,
       description: system.description,
       avatarUrl: system.avatarUrl,
@@ -99,6 +100,7 @@ export async function publishNpcSnapshot(npcId: string, authorId: string) {
     systemName: npc.system?.name || 'Generico',
     snapshotJson: {
       id: npc.id,
+      version: (npc.dataJson as Record<string, unknown>)?.__meta && typeof (npc.dataJson as Record<string, any>).__meta.version === 'string' ? (npc.dataJson as Record<string, any>).__meta.version : 'v1',
       name: npc.name,
       description: npc.description,
       avatarUrl: npc.avatarUrl,
@@ -130,6 +132,7 @@ export async function publishCharacterSnapshot(characterId: string, authorId: st
     systemName: character.system.name,
     snapshotJson: {
       id: character.id,
+      version: (character.dataJson as Record<string, unknown>)?.__meta && typeof (character.dataJson as Record<string, any>).__meta.version === 'string' ? (character.dataJson as Record<string, any>).__meta.version : 'v1',
       name: character.name,
       description: character.description,
       avatarUrl: character.avatarUrl,

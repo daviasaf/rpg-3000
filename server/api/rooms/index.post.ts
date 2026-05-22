@@ -21,13 +21,20 @@ export default defineEventHandler(async (event) => {
   if (!system) {
     throw createError({ statusCode: 404, statusMessage: 'Sistema nao encontrado.' })
   }
+  if (system.moderationStatus !== 'APPROVED') {
+    throw createError({ statusCode: 403, statusMessage: 'Este conteudo ainda esta em analise e nao pode ser usado em sessoes.' })
+  }
 
   if (input.characterId) {
     const character = await prisma.character.findFirst({
-      where: { id: input.characterId, userId: user.id, systemId: input.systemId }
+      where: { id: input.characterId, userId: user.id },
+      include: { system: true }
     })
-    if (!character) {
+    if (!character || !compatibleSystem(character.systemId, character.system.schemaJson as Record<string, any>, input.systemId)) {
       throw createError({ statusCode: 400, statusMessage: 'Escolha um personagem compativel com o sistema.' })
+    }
+    if (character.moderationStatus !== 'APPROVED') {
+      throw createError({ statusCode: 403, statusMessage: 'Este conteudo ainda esta em analise e nao pode ser usado em sessoes.' })
     }
   }
 
@@ -56,3 +63,7 @@ export default defineEventHandler(async (event) => {
 
   return { room }
 })
+
+function compatibleSystem(characterSystemId: string, schema: Record<string, any>, roomSystemId: string) {
+  return characterSystemId === roomSystemId || schema?.provenance?.sourceSystemId === roomSystemId
+}

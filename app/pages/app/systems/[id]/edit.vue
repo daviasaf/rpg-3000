@@ -8,6 +8,7 @@ const route = useRoute()
 const { push, apiError } = useToast()
 const loading = ref(false)
 const formErrors = ref<string[]>([])
+const saveIntentOpen = ref(false)
 const { data } = await useFetch<{ system: {
   id: string
   name: string
@@ -38,6 +39,7 @@ const schema = ref<SystemSchema>({
   sheetSections: data.value?.system.schemaJson?.sheetSections || [],
   sheetTexts: data.value?.system.schemaJson?.sheetTexts || [],
   sheetLists: data.value?.system.schemaJson?.sheetLists || [],
+  levelProgression: data.value?.system.schemaJson?.levelProgression || [],
   leveling: {
     levelOneAttributePoints: data.value?.system.schemaJson?.leveling?.levelOneAttributePoints ?? 6,
     attributesPerLevel: data.value?.system.schemaJson?.leveling?.attributesPerLevel ?? 1,
@@ -50,7 +52,7 @@ const schema = ref<SystemSchema>({
 const fields = ref<DynamicField[]>((data.value?.system.fields || []).map((field, index) => ({ ...field, order: field.order ?? index })))
 const isRejected = computed(() => data.value?.system.moderationStatus === 'REJECTED')
 
-async function submit() {
+async function submit(publish = false) {
   if (isRejected.value) return
   formErrors.value = validateDraft()
   if (formErrors.value.length) {
@@ -62,24 +64,28 @@ async function submit() {
   try {
     const normalizedSchema = normalizeSchema(schema.value, fields.value)
     const normalizedFields = fieldsFromSheetTabs(normalizedSchema.sheetTabs || [], fields.value).map(normalizeField)
-    await $fetch(`/api/systems/${route.params.id}`, {
+    const response = await $fetch<{ system: { id: string } }>(`/api/systems/${route.params.id}`, {
       method: 'PUT',
       body: {
         name: basic.name,
         description: basic.description,
         avatarUrl: basic.avatarUrl,
         tags: basic.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
-        visibility: basic.visibility,
+        visibility: publish ? 'PUBLIC' : 'PRIVATE',
         schemaJson: normalizedSchema,
         fields: normalizedFields
       }
     })
-    push('Sistema atualizado.', 'success')
-    await navigateTo(`/app/systems/${route.params.id}`)
+    if (publish) {
+      await $fetch(`/api/systems/${response.system.id}/publish`, { method: 'POST' })
+    }
+    push(publish ? 'Sistema salvo e enviado para analise.' : 'Sistema salvo.', 'success')
+    await navigateTo(`/app/systems/${response.system.id}`)
   } catch (error) {
     apiError(error, 'Nao foi possivel editar o sistema.')
   } finally {
     loading.value = false
+    saveIntentOpen.value = false
   }
 }
 
@@ -194,6 +200,7 @@ function normalizeSchema(currentSchema: SystemSchema, currentFields: DynamicFiel
 
   return {
     ...currentSchema,
+    version: (currentSchema as any).version || 'v1',
     primaryResource: keyFromLabel(currentSchema.primaryResource || 'vida'),
     rulesMarkdown,
     sheetTabs: normalizedTabs,
@@ -236,6 +243,19 @@ function normalizeSchema(currentSchema: SystemSchema, currentFields: DynamicFiel
       attributeLimitIncreasePerLevel: Math.max(0, Math.min(100, Number(currentSchema.leveling?.attributeLimitIncreasePerLevel ?? 1))),
       maxAttributeLimit: Math.max(1, Math.min(200, Number(currentSchema.leveling?.maxAttributeLimit ?? 20)))
     },
+    levelProgression: (currentSchema.levelProgression || []).map((level, index) => ({
+      id: level.id || `level_rule_${index + 1}`,
+      level: Math.max(1, Math.min(100, Number(level.level || index + 1))),
+      attributeBudget: Math.max(0, Math.min(200, Number(level.attributeBudget ?? level.attributePoints ?? 0))),
+      attributePoints: Math.max(0, Math.min(200, Number(level.attributePoints || 0))),
+      skillChoices: Math.max(0, Math.min(100, Number(level.skillChoices || 0))),
+      powerChoices: Math.max(0, Math.min(100, Number(level.powerChoices || 0))),
+      traitChoices: 0,
+      itemChoices: 0,
+      weaponChoices: 0,
+      inventoryCapacity: Math.max(0, Math.min(10000, Number(level.inventoryCapacity || 0))),
+      notes: level.notes?.trim() || ''
+    })),
     classes: (currentSchema.classes || []).map((rpgClass, classIndex) => ({
       id: rpgClass.id || `class_${classIndex + 1}`,
       key: keyFromLabel(rpgClass.key || rpgClass.name),
@@ -244,6 +264,13 @@ function normalizeSchema(currentSchema: SystemSchema, currentFields: DynamicFiel
       maxLevel: Math.max(1, Math.min(100, Number(rpgClass.maxLevel || 1))),
       levels: rpgClass.levels.map((level) => ({
         level: Number(level.level),
+        description: level.description?.trim() || '',
+        skillChoices: Math.max(0, Number(level.skillChoices || 0)),
+        powerChoices: Math.max(0, Number(level.powerChoices || 0)),
+        traitChoices: Math.max(0, Number(level.traitChoices || 0)),
+        itemChoices: Math.max(0, Number(level.itemChoices || 0)),
+        weaponChoices: Math.max(0, Number(level.weaponChoices || 0)),
+        inventoryCapacity: Math.max(0, Number(level.inventoryCapacity || 0)),
         changes: level.changes.map((change) => ({
           targetKey: change.operation === 'NOTE' ? undefined : keyFromLabel(change.targetKey || ''),
           targetLabel: change.operation === 'NOTE' ? undefined : targetLabels.get(keyFromLabel(change.targetKey || '')) || change.targetLabel || change.targetKey,
@@ -290,7 +317,6 @@ function keyFromLabel(label: string) {
         <label><span class="label">Avatar por URL</span><input v-model="basic.avatarUrl" class="input" type="url" placeholder="https://..."></label>
         <label><span class="label">Tags</span><input v-model="basic.tags" class="input" type="text"></label>
         <label class="md:col-span-2"><span class="label">Descricao *</span><textarea v-model="basic.description" rows="3" class="input" /></label>
-        <label><span class="label">Visibilidade *</span><select v-model="basic.visibility" class="select"><option value="PUBLIC">Publico</option><option value="PRIVATE">Privado</option></select></label>
       </div>
     </AppCard>
     <AppCard v-if="formErrors.length" class="border-flare/40 bg-flare/10">
@@ -302,10 +328,18 @@ function keyFromLabel(label: string) {
     <DynamicSheetBuilder v-model:fields="fields" v-model:schema="schema">
       <template #publish>
         <div class="mt-5 flex flex-wrap gap-2">
-          <AppButton :loading="loading" :disabled="isRejected" @click="submit">Salvar alteracoes</AppButton>
-          <AppButton variant="ghost" :loading="loading" :disabled="isRejected" @click="publishSystem">Republicar na comunidade</AppButton>
+          <AppButton :loading="loading" :disabled="isRejected" @click="saveIntentOpen = true">Salvar alteracoes</AppButton>
         </div>
       </template>
     </DynamicSheetBuilder>
+    <SavePublishModal
+      :open="saveIntentOpen"
+      title="Salvar sistema"
+      message="Salvar cria uma versao pessoal/privada. Salvar e postar cria um snapshot para analise; se este sistema ja estava aprovado, a versao aprovada antiga continua publica."
+      :loading="loading"
+      @close="saveIntentOpen = false"
+      @save="submit(false)"
+      @publish="submit(true)"
+    />
   </div>
 </template>

@@ -42,6 +42,10 @@ export function keyFromLabel(label: string) {
     .replace(/(^_|_$)/g, '')
 }
 
+export function formulaKeyFromLabel(label: string) {
+  return keyFromLabel(label).toUpperCase()
+}
+
 export function uid(prefix: string) {
   return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`
 }
@@ -57,7 +61,7 @@ export function createSheetTab(type: SheetTabType, index = 0): SheetTab {
     order: index,
     enabled: true,
     readonly: type === 'RULES',
-    playerEditable: type !== 'RULES',
+    playerEditable: true,
     allowMultiple: !['RULES'].includes(type),
     allowExtraFields: ['ITEMS', 'WEAPONS', 'TRAITS', 'POWERS', 'CONDITIONS', 'CUSTOM'].includes(type),
     allowRolls: ['ITEMS', 'WEAPONS', 'POWERS', 'CONDITIONS', 'ROLLS', 'CUSTOM'].includes(type),
@@ -98,8 +102,8 @@ export function defaultFieldsForType(type: SheetTabType): SheetTabField[] {
   if (type === 'ATTRIBUTES') return [field('Valor', 'NUMBER', 0), field('Minimo', 'NUMBER', 1), field('Maximo', 'NUMBER', 2), field('Descricao', 'LONG_TEXT', 3)]
   if (type === 'RESOURCES') return [field('Valor atual', 'NUMBER', 0), field('Valor maximo', 'NUMBER', 1), field('Descricao', 'LONG_TEXT', 2)]
   if (type === 'SKILLS') return [field('Valor', 'NUMBER', 0), field('Atributo relacionado', 'SHORT_TEXT', 1), field('Descricao', 'LONG_TEXT', 2)]
-  if (type === 'ITEMS') return [field('Texto', 'LONG_TEXT', 0), field('Rolagem', 'ROLL', 1), field('Dano', 'DAMAGE', 2), field('Bonus', 'BONUS', 3), field('Quantidade', 'NUMBER', 4)]
-  if (type === 'WEAPONS') return [field('Texto', 'LONG_TEXT', 0), field('Dano', 'DAMAGE', 1), field('Habilidade', 'SHORT_TEXT', 2), field('Rolagem', 'ROLL', 3), field('Bonus', 'BONUS', 4)]
+  if (type === 'ITEMS') return [field('Texto', 'LONG_TEXT', 0), field('Peso', 'NUMBER', 1), field('Rolagem', 'ROLL', 2), field('Dano', 'DAMAGE', 3), field('Bonus', 'BONUS', 4), field('Quantidade', 'NUMBER', 5)]
+  if (type === 'WEAPONS') return [field('Texto', 'LONG_TEXT', 0), field('Dano', 'DAMAGE', 1), field('Peso', 'NUMBER', 2), field('Habilidade', 'SHORT_TEXT', 3), field('Rolagem', 'ROLL', 4), field('Bonus', 'BONUS', 5)]
   if (type === 'TRAITS') return [field('Texto', 'LONG_TEXT', 0), field('Bonus', 'BONUS', 1), field('Efeito', 'LONG_TEXT', 2)]
   if (type === 'POWERS') return [field('Texto', 'LONG_TEXT', 0), field('Dano', 'DAMAGE', 1), field('Custo', 'COST', 2), field('Alcance', 'RANGE', 3), field('Rolagem', 'ROLL', 4), field('Bonus', 'BONUS', 5)]
   if (type === 'TEXT_BLOCKS') return [field('Texto', 'LONG_TEXT', 0)]
@@ -135,9 +139,9 @@ export function normalizeSheetTab(tab: SheetTab, index: number): SheetTab {
     key,
     description: tab.description || '',
     order: index,
-    enabled: tab.enabled !== false,
+    enabled: true,
     readonly: Boolean(tab.readonly || tab.type === 'RULES'),
-    playerEditable: tab.type === 'RULES' ? false : tab.playerEditable !== false,
+    playerEditable: true,
     allowMultiple: tab.type === 'RULES' ? false : tab.allowMultiple !== false,
     allowExtraFields: Boolean(tab.allowExtraFields),
     allowRolls: Boolean(tab.allowRolls),
@@ -145,7 +149,7 @@ export function normalizeSheetTab(tab: SheetTab, index: number): SheetTab {
     allowDamageCostAbility: Boolean(tab.allowDamageCostAbility),
     textMode: tab.textMode || (tab.type === 'TEXT_BLOCKS' ? 'LIST' : undefined),
     fields: (tab.fields?.length ? tab.fields : defaultFieldsForType(tab.type)).map((field, fieldIndex) => normalizeSheetTabField(field, fieldIndex)),
-    records: (tab.records || []).map((record, recordIndex) => normalizeSheetTabRecord(record, recordIndex)),
+    records: uniqueRecordKeys((tab.records || []).map((record, recordIndex) => normalizeSheetTabRecord(record, recordIndex))),
     systemMarkdown: tab.type === 'RULES' ? String(tab.systemMarkdown || '') : tab.systemMarkdown
   }
 }
@@ -165,14 +169,39 @@ export function normalizeSheetTabField(field: SheetTabField, index: number): She
 }
 
 export function normalizeSheetTabRecord(record: SheetTabRecord, index: number): SheetTabRecord {
+  const name = String(record.name || `Registro ${index + 1}`).trim()
   return {
     ...record,
     id: record.id || uid('sheet_record'),
-    name: String(record.name || `Registro ${index + 1}`).trim(),
+    name,
+    key: formulaKeyFromLabel(record.key || name),
     description: record.description || '',
     text: record.text || '',
-    extraFields: record.extraFields || []
+    weight: record.weight === null || record.weight === undefined ? null : Math.max(0, Number(record.weight || 0)),
+    bonusKey: record.bonusKey ? formulaKeyFromLabel(record.bonusKey) : undefined,
+    extraFields: record.extraFields || [],
+    skillLevels: (record.skillLevels || []).map((level, levelIndex) => ({
+      id: level.id || uid('skill_level'),
+      name: String(level.name || `Nivel ${levelIndex + 1}`).trim(),
+      key: formulaKeyFromLabel(level.key || level.name || `NIVEL_${levelIndex + 1}`),
+      value: Number(level.value || 0)
+    }))
   }
+}
+
+function uniqueRecordKeys(records: SheetTabRecord[]) {
+  const used = new Set<string>()
+  return records.map((record) => {
+    const base = formulaKeyFromLabel(record.key || record.name) || 'REGISTRO'
+    let key = base
+    let index = 2
+    while (used.has(key)) {
+      key = `${base}_${index}`
+      index += 1
+    }
+    used.add(key)
+    return { ...record, key }
+  })
 }
 
 export function legacyTabsFromSchema(schema: SystemSchema | undefined): SheetTab[] {
@@ -234,13 +263,13 @@ export function fieldsFromSheetTabs(tabs: SheetTab[], existingFields: DynamicFie
   const oldNonTabFields = existingFields.filter((field) => !['ATTRIBUTE', 'RESOURCE', 'SKILL', 'ROLL_RULE'].includes(field.category))
   const generated: DynamicField[] = []
 
-  for (const tab of tabs.filter((item) => item.enabled !== false)) {
+  for (const tab of tabs) {
     const category = fieldCategoryForTab(tab.type)
     if (!category) continue
 
     const records = tab.records || []
     records.forEach((record, recordIndex) => {
-      const key = keyFromLabel(`${tab.key}_${record.name}`)
+      const key = formulaKeyFromLabel(record.key || record.name)
       generated.push({
         id: record.id,
         key,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Edit3, ExternalLink, Heart, MessageCircle, PlusCircle, Star, Trash2, UserPlus } from 'lucide-vue-next'
+import { ArrowLeft, Edit3, ExternalLink, Heart, MessageCircle, PlusCircle, Send, Star, Trash2, UserPlus } from 'lucide-vue-next'
 import type { SystemSchema } from '../../../../../shared/types/system'
 
 definePageMeta({ layout: 'app', middleware: 'auth' })
@@ -11,6 +11,8 @@ const { push, apiError } = useToast()
 const deleting = ref(false)
 const adding = ref(false)
 const confirmDeleteOpen = ref(false)
+const publishOpen = ref(false)
+const publishing = ref(false)
 const likeLoading = ref(false)
 const featuring = ref(false)
 const comment = ref('')
@@ -37,6 +39,8 @@ const { data, refresh } = await useFetch<{ system: {
 const isOwner = computed(() => data.value?.system.createdById === auth.user?.id)
 const isRejected = computed(() => data.value?.system.moderationStatus === 'REJECTED')
 const classes = computed(() => data.value?.system.schemaJson?.classes || [])
+const systemVersion = computed(() => String((data.value?.system.schemaJson as any)?.version || 'v1'))
+const originalCreator = computed(() => (data.value?.system.schemaJson as any)?.provenance?.originalCreatorName || data.value?.system.createdBy?.name || 'Toca dos Nerds')
 const liked = computed(() => Boolean(data.value?.system.likes?.length))
 const fieldGroups = computed(() => {
   const order = ['ATTRIBUTE', 'RESOURCE', 'SKILL', 'TEXT_FIELD', 'ROLL_RULE', 'FORMULA', 'NUMERIC_FIELD', 'BOOLEAN_FIELD', 'LIST_FIELD', 'STATUS_BAR']
@@ -108,6 +112,7 @@ function ownerActions() {
   const system = data.value?.system
   return [
     { key: 'edit', label: 'Editar', icon: Edit3, disabled: isRejected.value },
+    { key: 'publish', label: system?.moderationStatus === 'PENDING' ? 'Em analise' : 'Postar na comunidade', icon: Send, disabled: isRejected.value || system?.moderationStatus === 'PENDING' || publishing.value },
     {
       key: 'feature',
       label: system?.featuredOnProfile ? 'Remover destaque' : 'Destacar no perfil',
@@ -125,11 +130,44 @@ async function handleOwnerAction(action: string) {
   if (action === 'edit') {
     await navigateTo(`/app/systems/${system.id}/edit`)
   }
+  if (action === 'publish') {
+    publishOpen.value = true
+  }
   if (action === 'feature') {
     await toggleFeatured()
   }
   if (action === 'delete') {
     confirmDeleteOpen.value = true
+  }
+}
+
+function visitorActions() {
+  return [
+    { key: 'copy', label: 'Gerar uma copia', icon: PlusCircle },
+    { key: 'profile', label: 'Ver perfil do criador', icon: UserPlus, disabled: !data.value?.system.createdBy?.id }
+  ]
+}
+
+async function handleVisitorAction(action: string) {
+  const system = data.value?.system
+  if (!system) return
+  if (action === 'copy') await addToInventory()
+  if (action === 'profile' && system.createdBy?.id) await navigateTo(`/app/profile/${system.createdBy.id}`)
+}
+
+async function publishSystem() {
+  const system = data.value?.system
+  if (!system) return
+  publishing.value = true
+  try {
+    await $fetch(`/api/systems/${system.id}/publish`, { method: 'POST' })
+    push('Sistema enviado para analise da comunidade.', 'success')
+    publishOpen.value = false
+    await refresh()
+  } catch (error) {
+    apiError(error, 'Nao foi possivel postar o sistema.')
+  } finally {
+    publishing.value = false
   }
 }
 
@@ -199,6 +237,7 @@ function categoryLabel(category: string) {
         <div class="min-w-0">
           <div class="flex flex-wrap gap-2">
             <span v-for="tag in data.system.tags" :key="tag" class="rounded-md border border-ember/25 bg-ember/10 px-2 py-1 text-xs font-bold text-ember">{{ tag }}</span>
+            <span class="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-xs font-bold text-mist">{{ systemVersion }}</span>
             <span v-if="data.system.moderationStatus" class="rounded-md border px-2 py-1 text-xs font-bold" :class="isRejected ? 'border-flare/35 bg-flare/10 text-red-100' : data.system.moderationStatus === 'PENDING' ? 'border-amber-300/30 bg-amber-300/10 text-amber-100' : 'border-emerald-400/25 bg-emerald-400/10 text-emerald-100'">
               {{ data.system.moderationStatus === 'PENDING' ? 'Em analise' : data.system.moderationStatus === 'REJECTED' ? 'Rejeitado' : 'Aprovado' }}
             </span>
@@ -208,7 +247,8 @@ function categoryLabel(category: string) {
           <p v-if="isRejected" class="mt-3 rounded-lg border border-flare/35 bg-flare/10 p-3 text-sm font-bold text-red-100">
             Este sistema foi rejeitado e esta bloqueado para edicao. {{ data.system.moderationReason ? `Motivo: ${data.system.moderationReason}` : 'Crie uma nova versao para enviar novamente.' }}
           </p>
-          <p class="mt-3 text-sm text-mist">Criador: {{ data.system.createdBy?.name || 'Toca dos Nerds' }}</p>
+          <p class="mt-3 text-sm text-mist">Criador original: <b class="text-white">{{ originalCreator }}</b></p>
+          <p v-if="!isOwner" class="mt-1 text-xs text-mist">Adicionar ao inventario cria uma copia privada sem alterar a autoria original.</p>
           <div class="mt-4 flex flex-wrap gap-2">
             <button type="button" class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-60" :class="liked ? 'border-ember bg-ember/15 text-ember' : 'border-white/10 bg-white/[0.04] text-white'" :disabled="likeLoading" @click="toggleLike">
               <span v-if="likeLoading" class="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
@@ -231,19 +271,14 @@ function categoryLabel(category: string) {
           </AppButton>
           <NuxtLink :to="`/app/characters/new?systemId=${data.system.id}`"><AppButton><UserPlus class="h-4 w-4" />Criar personagem</AppButton></NuxtLink>
           <AppActionMenu v-if="isOwner" title="Acoes do sistema" :items="ownerActions()" @select="handleOwnerAction" />
+          <AppActionMenu v-else title="Acoes do sistema" :items="visitorActions()" @select="handleVisitorAction" />
         </div>
         </div>
       </div>
     </AppCard>
-    <AppCard v-for="group in fieldGroups" :key="group.category">
-      <h2 class="text-xl font-black text-white">{{ categoryLabel(group.category) }}</h2>
-      <div class="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <div v-for="field in group.fields" :key="field.id" class="rounded-lg border border-white/10 bg-white/[0.04] p-3">
-          <h3 class="text-lg font-black text-white">{{ field.label }}</h3>
-          <p class="mt-1 text-sm text-mist">Chave: {{ field.key }} | Tipo: {{ field.type }}</p>
-          <p v-if="field.formula" class="mt-2 rounded-lg bg-white/[0.05] p-2 text-sm text-arcane">{{ field.formula }}</p>
-        </div>
-      </div>
+    <AppCard>
+      <h2 class="text-xl font-black text-white">Estrutura do sistema</h2>
+      <SystemStructurePreview class="mt-4" :schema="data.system.schemaJson" :fields="data.system.fields as any" />
     </AppCard>
     <AppCard v-if="classes.length">
       <h2 class="text-xl font-black text-white">Classes</h2>
@@ -281,6 +316,15 @@ function categoryLabel(category: string) {
       :loading="deleting"
       @close="confirmDeleteOpen = false"
       @confirm="deleteSystem"
+    />
+    <ConfirmModal
+      :open="publishOpen"
+      title="Postar sistema"
+      message="Uma copia das regras atuais sera enviada para analise da comunidade. Edicoes futuras criam nova versao/snapshot."
+      confirm-label="Postar"
+      :loading="publishing"
+      @close="publishOpen = false"
+      @confirm="publishSystem"
     />
   </div>
 </template>

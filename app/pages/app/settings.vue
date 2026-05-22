@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronDown, Image, LogOut, Mail, Palette, Save, Shield, UserRound } from 'lucide-vue-next'
+import { ChevronDown, Image, LogOut, Mail, Moon, Palette, Save, Shield, Sun, UserRound } from 'lucide-vue-next'
 
 definePageMeta({ layout: 'app', middleware: 'auth' })
 
@@ -22,15 +22,34 @@ const profile = reactive({
 
 const accentPresets = [
   '#ff8a13',
+  '#fb923c',
   '#f97316',
+  '#ea580c',
   '#facc15',
+  '#eab308',
+  '#84cc16',
   '#22c55e',
+  '#10b981',
   '#14b8a6',
+  '#06b6d4',
   '#38bdf8',
+  '#0ea5e9',
+  '#3b82f6',
   '#6366f1',
+  '#8b5cf6',
   '#a855f7',
+  '#d946ef',
   '#ec4899',
-  '#ef4444'
+  '#f43f5e',
+  '#ef4444',
+  '#dc2626',
+  '#f59e0b',
+  '#2dd4bf',
+  '#60a5fa',
+  '#c084fc',
+  '#f472b6',
+  '#f87171',
+  '#ffffff'
 ]
 
 const sections = [
@@ -100,6 +119,10 @@ function payloadFor(key: string) {
     payload.newPassword = profile.newPassword
   }
   return payload
+}
+
+function toggleTheme() {
+  theme.value = theme.value === 'dark' ? 'light' : 'dark'
 }
 
 async function saveSection(key: string) {
@@ -183,16 +206,28 @@ async function saveSection(key: string) {
             <label><span class="label">URL da foto</span><input v-model="profile.avatarUrl" class="input" type="url" placeholder="https://..."></label>
             <AppButton type="button" variant="ghost" @click="profile.avatarUrl = ''">Remover foto</AppButton>
           </div>
-          <div v-if="section.key === 'visual'" class="grid gap-3 md:grid-cols-2">
-            <label><span class="label">Tema</span><select v-model="theme" class="select"><option value="dark">Dark</option><option value="light">Light</option></select></label>
+          <div v-if="section.key === 'visual'" class="grid gap-4 lg:grid-cols-[auto_1fr] lg:items-start">
             <div>
+              <span class="label">Tema</span>
+              <button
+                type="button"
+                class="inline-flex h-9 items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 text-xs font-black text-white transition hover:border-ember/40 hover:bg-white/[0.07]"
+                :title="theme === 'dark' ? 'Tema escuro' : 'Tema claro'"
+                @click="toggleTheme"
+              >
+                <Moon v-if="theme === 'dark'" class="h-4 w-4 text-ember" />
+                <Sun v-else class="h-4 w-4 text-ember" />
+                {{ theme === 'dark' ? 'Dark' : 'Light' }}
+              </button>
+            </div>
+            <div class="min-w-0">
               <span class="label">Cor de destaque</span>
-              <div class="grid grid-cols-5 gap-2 sm:grid-cols-10 md:grid-cols-5 lg:grid-cols-10">
+              <div class="flex flex-wrap gap-2">
                 <button
                   v-for="color in accentPresets"
                   :key="color"
                   type="button"
-                  class="h-10 rounded-lg border transition hover:scale-[1.03]"
+                  class="h-9 w-9 rounded-lg border transition hover:scale-[1.04]"
                   :class="profile.profileColor === color ? 'border-white ring-2 ring-ember/70' : 'border-white/10'"
                   :style="{ backgroundColor: color }"
                   :title="color"

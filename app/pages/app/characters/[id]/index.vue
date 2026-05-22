@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Edit3, Star, Trash2 } from 'lucide-vue-next'
+import { ArrowLeft, Edit3, Send, Star, Trash2 } from 'lucide-vue-next'
 import type { SystemSchema } from '../../../../../shared/types/system'
 
 definePageMeta({ layout: 'app', middleware: 'auth' })
@@ -8,6 +8,8 @@ const route = useRoute()
 const { push, apiError } = useToast()
 const deleting = ref(false)
 const confirmDeleteOpen = ref(false)
+const publishOpen = ref(false)
+const publishing = ref(false)
 const featuring = ref(false)
 const { data, refresh } = await useFetch<{ character: {
   id: string
@@ -40,6 +42,7 @@ function actionItems() {
   const character = data.value?.character
   return [
     { key: 'edit', label: 'Editar', icon: Edit3, disabled: character?.moderationStatus === 'REJECTED' },
+    { key: 'publish', label: character?.moderationStatus === 'PENDING' ? 'Em analise' : 'Postar na comunidade', icon: Send, disabled: character?.moderationStatus === 'REJECTED' || character?.moderationStatus === 'PENDING' || publishing.value },
     {
       key: 'feature',
       label: character?.featuredOnProfile ? 'Remover destaque' : 'Destacar no perfil',
@@ -54,8 +57,25 @@ async function handleAction(action: string) {
   const character = data.value?.character
   if (!character) return
   if (action === 'edit') await navigateTo(`/app/characters/${character.id}/edit`)
+  if (action === 'publish') publishOpen.value = true
   if (action === 'feature') await toggleFeatured()
   if (action === 'delete') confirmDeleteOpen.value = true
+}
+
+async function publishCharacter() {
+  const character = data.value?.character
+  if (!character) return
+  publishing.value = true
+  try {
+    await $fetch(`/api/characters/${character.id}/publish`, { method: 'POST' })
+    push('Personagem enviado para analise da comunidade.', 'success')
+    publishOpen.value = false
+    await refresh()
+  } catch (error) {
+    apiError(error, 'Nao foi possivel postar o personagem.')
+  } finally {
+    publishing.value = false
+  }
 }
 
 async function toggleFeatured() {
@@ -102,6 +122,15 @@ async function toggleFeatured() {
       :loading="deleting"
       @close="confirmDeleteOpen = false"
       @confirm="deleteCharacter"
+    />
+    <ConfirmModal
+      :open="publishOpen"
+      title="Postar personagem"
+      message="Uma copia da ficha sera enviada para analise da comunidade. Mudancas futuras na ficha pessoal nao alteram esse snapshot."
+      confirm-label="Postar"
+      :loading="publishing"
+      @close="publishOpen = false"
+      @confirm="publishCharacter"
     />
   </div>
 </template>

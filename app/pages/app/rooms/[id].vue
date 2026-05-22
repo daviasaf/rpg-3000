@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Crown, Eye, LogOut, MessageCircle, MoreHorizontal, Play, Radio, Search, Settings, Square, UserPlus, Users, X } from 'lucide-vue-next'
 import type { SystemSchema } from '../../../../shared/types/system'
+import { characterFormulaVariableList, formulaVariableList } from '~~/shared/utils/characterRules'
 
 definePageMeta({ layout: 'app', middleware: 'auth' })
 
@@ -37,7 +38,7 @@ const { data, refresh, error } = await useFetch<{ room: {
     system?: { name: string; schemaJson?: SystemSchema; fields: Array<{ id?: string; key: string; label: string; type: 'TEXT' | 'NUMBER' | 'BOOLEAN' | 'LIST' | 'FORMULA' | 'DICE'; category: 'ATTRIBUTE' | 'SKILL' | 'RESOURCE' | 'STATUS_BAR' | 'TEXT_FIELD' | 'NUMERIC_FIELD' | 'BOOLEAN_FIELD' | 'LIST_FIELD' | 'FORMULA' | 'ROLL_RULE'; defaultValue?: unknown; optionsJson?: unknown; formula?: string | null }> }
   } | null }>
 } }>(`/api/rooms/${route.params.id}`)
-const { data: myCharacters } = await useFetch<{ characters: Array<{ id: string; name: string; systemId: string; system?: { id: string; name: string } }> }>('/api/characters', { default: () => ({ characters: [] }) })
+const { data: myCharacters } = await useFetch<{ characters: Array<{ id: string; name: string; systemId: string; system?: { id: string; name: string; schemaJson?: SystemSchema } }> }>('/api/characters', { default: () => ({ characters: [] }) })
 const { data: friendsData } = await useFetch<{ friends: Array<{ id: string; name: string; username?: string | null; avatarUrl?: string | null; profileColor?: string | null }> }>('/api/social/friends', { default: () => ({ friends: [] }) })
 
 watch(error, async (next) => {
@@ -122,13 +123,28 @@ const sortedMembers = computed(() => [...roomMembers.value].sort((left, right) =
   const rightOnline = isOnline(right) ? 0 : 1
   return leftOnline - rightOnline
 }))
-const compatibleCharacters = computed(() => (myCharacters.value?.characters || []).filter((character) => character.systemId === data.value?.room.system.id))
+const compatibleCharacters = computed(() => (myCharacters.value?.characters || []).filter((character) => {
+  const roomSystemId = data.value?.room.system.id
+  if (!roomSystemId) return false
+  return character.systemId === roomSystemId || (character.system as any)?.schemaJson?.provenance?.sourceSystemId === roomSystemId
+}))
 const availableFriends = computed(() => {
   const term = inviteSearch.value.trim().toLowerCase()
   const memberIds = new Set((data.value?.room.members || []).map((member) => member.user?.id).filter(Boolean))
   return (friendsData.value?.friends || [])
     .filter((friend) => !memberIds.has(friend.id))
     .filter((friend) => !term || `${friend.name} ${friend.username || ''}`.toLowerCase().includes(term))
+})
+const rollVariables = computed(() => {
+  if (!myCharacter.value?.system || !myCharacter.value.dataJson) {
+    const system = data.value?.room.system
+    return isMaster.value ? formulaVariableList(system?.schemaJson as SystemSchema | undefined, system?.fields as never[] || []) : []
+  }
+  return characterFormulaVariableList(
+    myCharacter.value.system.schemaJson as SystemSchema | undefined,
+    myCharacter.value.system.fields as never[] || [],
+    myCharacter.value.dataJson as Record<string, unknown>
+  )
 })
 
 watch(myCharacter, (next) => {
@@ -414,7 +430,7 @@ onBeforeUnmount(() => {
       </main>
 
       <aside class="grid gap-5 xl:sticky xl:top-24">
-        <DiceRoller :room-id="data.room.id" :character-id="myCharacter?.id" :is-master="isMaster" @rolled="chat?.load()" />
+        <DiceRoller :room-id="data.room.id" :character-id="myCharacter?.id" :is-master="isMaster" :variables="rollVariables" @rolled="chat?.load()" />
         <InitiativePanel
           :room-id="data.room.id"
           :members="data.room.members"

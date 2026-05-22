@@ -4,6 +4,7 @@ import { prisma } from '../../../utils/prisma'
 import { updateCharacterSchema } from '../../../utils/validation'
 import { jsonValue } from '../../../utils/json'
 import { readZodBody } from '../../../utils/body'
+import { validateCharacterData } from '~~/shared/utils/characterRules'
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuth(event)
@@ -27,6 +28,12 @@ export default defineEventHandler(async (event) => {
   }
 
   const dataJson = input.dataJson ? { ...(character.dataJson as Record<string, unknown>), ...input.dataJson } : undefined
+  if (dataJson) {
+    const ruleErrors = validateCharacterData(character.system.schemaJson as any, character.system.fields as any, dataJson)
+    if (ruleErrors.length) {
+      throw createError({ statusCode: 400, statusMessage: ruleErrors[0], data: { errors: ruleErrors } })
+    }
+  }
 
   const updated = await prisma.$transaction(async (tx) => {
     if (dataJson) {

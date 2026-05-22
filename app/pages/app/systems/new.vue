@@ -7,6 +7,7 @@ definePageMeta({ layout: 'app', middleware: 'auth' })
 const { push, apiError } = useToast()
 const loading = ref(false)
 const formErrors = ref<string[]>([])
+const saveIntentOpen = ref(false)
 const basic = reactive({
   name: '',
   description: '',
@@ -23,6 +24,7 @@ const schema = ref<SystemSchema>({
   sheetSections: [],
   sheetTexts: [],
   sheetLists: [],
+  levelProgression: [{ id: 'level_rule_1', level: 1, attributeBudget: 6, attributePoints: 5, skillChoices: 0, powerChoices: 0, traitChoices: 0, itemChoices: 0, weaponChoices: 0, inventoryCapacity: 0, notes: '' }],
   leveling: {
     levelOneAttributePoints: 6,
     attributesPerLevel: 1,
@@ -34,7 +36,7 @@ const schema = ref<SystemSchema>({
 })
 const fields = ref<DynamicField[]>([])
 
-async function submit() {
+async function submit(publish = false) {
   formErrors.value = validateDraft()
   if (formErrors.value.length) {
     push('Corrija os pontos destacados antes de publicar o sistema.', 'error')
@@ -53,17 +55,18 @@ async function submit() {
         description: basic.description,
         avatarUrl: basic.avatarUrl,
         tags: basic.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
-        visibility: basic.visibility,
+        visibility: publish ? 'PUBLIC' : 'PRIVATE',
         schemaJson: normalizedSchema,
         fields: normalizedFields
       }
     })
-    push(basic.visibility === 'PUBLIC' ? 'Sistema enviado para analise.' : 'Sistema criado.', 'success')
+    push(publish ? 'Sistema salvo e enviado para analise.' : 'Sistema salvo.', 'success')
     await navigateTo(`/app/systems/${response.system.id}`)
   } catch (error) {
     apiError(error, 'Nao foi possivel criar o sistema.')
   } finally {
     loading.value = false
+    saveIntentOpen.value = false
   }
 }
 
@@ -222,6 +225,7 @@ function normalizeSchema(currentSchema: SystemSchema, currentFields: DynamicFiel
 
   return {
     ...currentSchema,
+    version: (currentSchema as any).version || 'v1',
     primaryResource: keyFromLabel(currentSchema.primaryResource || 'vida'),
     rulesMarkdown,
     sheetTabs: normalizedTabs,
@@ -264,6 +268,19 @@ function normalizeSchema(currentSchema: SystemSchema, currentFields: DynamicFiel
       attributeLimitIncreasePerLevel: Math.max(0, Math.min(100, Number(currentSchema.leveling?.attributeLimitIncreasePerLevel ?? 1))),
       maxAttributeLimit: Math.max(1, Math.min(200, Number(currentSchema.leveling?.maxAttributeLimit ?? 20)))
     },
+    levelProgression: (currentSchema.levelProgression || []).map((level, index) => ({
+      id: level.id || `level_rule_${index + 1}`,
+      level: Math.max(1, Math.min(100, Number(level.level || index + 1))),
+      attributeBudget: Math.max(0, Math.min(200, Number(level.attributeBudget ?? level.attributePoints ?? 0))),
+      attributePoints: Math.max(0, Math.min(200, Number(level.attributePoints || 0))),
+      skillChoices: Math.max(0, Math.min(100, Number(level.skillChoices || 0))),
+      powerChoices: Math.max(0, Math.min(100, Number(level.powerChoices || 0))),
+      traitChoices: 0,
+      itemChoices: 0,
+      weaponChoices: 0,
+      inventoryCapacity: Math.max(0, Math.min(10000, Number(level.inventoryCapacity || 0))),
+      notes: level.notes?.trim() || ''
+    })),
     classes: (currentSchema.classes || []).map((rpgClass, classIndex) => ({
       id: rpgClass.id || `class_${classIndex + 1}`,
       key: keyFromLabel(rpgClass.key || rpgClass.name),
@@ -274,6 +291,13 @@ function normalizeSchema(currentSchema: SystemSchema, currentFields: DynamicFiel
         .filter((level) => level.level <= Number(rpgClass.maxLevel || 1))
         .map((level) => ({
           level: Number(level.level),
+          description: level.description?.trim() || '',
+          skillChoices: Math.max(0, Number(level.skillChoices || 0)),
+          powerChoices: Math.max(0, Number(level.powerChoices || 0)),
+          traitChoices: Math.max(0, Number(level.traitChoices || 0)),
+          itemChoices: Math.max(0, Number(level.itemChoices || 0)),
+          weaponChoices: Math.max(0, Number(level.weaponChoices || 0)),
+          inventoryCapacity: Math.max(0, Number(level.inventoryCapacity || 0)),
           changes: level.changes.map((change) => ({
             targetKey: change.operation === 'NOTE' ? undefined : keyFromLabel(change.targetKey || ''),
             targetLabel: change.operation === 'NOTE' ? undefined : targetLabels.get(keyFromLabel(change.targetKey || '')) || change.targetLabel || change.targetKey,
@@ -316,7 +340,6 @@ function keyFromLabel(label: string) {
         <label><span class="label">Avatar por URL</span><input v-model="basic.avatarUrl" name="systemAvatar" class="input" type="url" placeholder="https://..."></label>
         <label><span class="label">Tags</span><input v-model="basic.tags" name="tags" class="input" type="text" placeholder="fantasia, d20, investigacao"></label>
         <label class="md:col-span-2"><span class="label">Descricao *</span><textarea v-model="basic.description" rows="3" class="input" /></label>
-        <label><span class="label">Visibilidade *</span><select v-model="basic.visibility" class="select"><option value="PUBLIC">Publico</option><option value="PRIVATE">Privado</option></select></label>
       </div>
     </AppCard>
     <AppCard v-if="formErrors.length" class="border-flare/40 bg-flare/10">
@@ -330,8 +353,17 @@ function keyFromLabel(label: string) {
     </AppCard>
     <DynamicSheetBuilder v-model:fields="fields" v-model:schema="schema">
       <template #publish>
-        <AppButton class="mt-5" :loading="loading" @click="submit">Publicar sistema</AppButton>
+        <AppButton class="mt-5" :loading="loading" @click="saveIntentOpen = true">Salvar sistema</AppButton>
       </template>
     </DynamicSheetBuilder>
+    <SavePublishModal
+      :open="saveIntentOpen"
+      title="Salvar sistema"
+      message="Salvar mantem o sistema privado. Salvar e postar cria um snapshot e envia para analise da comunidade."
+      :loading="loading"
+      @close="saveIntentOpen = false"
+      @save="submit(false)"
+      @publish="submit(true)"
+    />
   </div>
 </template>

@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: 'Perfil nao encontrado.' })
   }
 
-  const [posts, profileComments, systems, npcs, characters, friendship, sent, received, likesCount, likedByMe] = await Promise.all([
+  const [posts, profileComments, systems, npcs, characters, approvedSystems, approvedPosts, friendship, sent, received, likesCount, likedByMe] = await Promise.all([
     prisma.profilePost.findMany({
     where: { userId: id, isPublic: true },
     include: {
@@ -53,6 +53,14 @@ export default defineEventHandler(async (event) => {
       orderBy: { updatedAt: 'desc' },
       take: 12
     }),
+    prisma.system.findMany({
+      where: { createdById: id, moderationStatus: 'APPROVED' },
+      select: { id: true, schemaJson: true, createdAt: true, updatedAt: true }
+    }),
+    prisma.communityPost.findMany({
+      where: { authorId: id, status: 'APPROVED' },
+      select: { type: true, originalSystemId: true, originalNpcId: true, originalCharacterId: true, createdAt: true }
+    }),
     prisma.friendRequest.findFirst({
       where: {
         status: 'ACCEPTED',
@@ -68,13 +76,29 @@ export default defineEventHandler(async (event) => {
     prisma.userProfileLike.findUnique({ where: { profileId_userId: { profileId: id, userId: user.id } }, select: { id: true } })
   ])
 
+  const systemsWithFlags = systems.map((system) => ({
+    ...system,
+    hasNewVersion: approvedSystems.some((candidate) => {
+      const schema = candidate.schemaJson as Record<string, unknown>
+      return schema?.previousApprovedSystemId === system.id || schema?.versionOfSystemId === system.id
+    }) || approvedPosts.some((post) => post.type === 'SYSTEM' && post.originalSystemId === system.id && post.createdAt > system.createdAt)
+  }))
+  const npcsWithFlags = npcs.map((npc) => ({
+    ...npc,
+    hasNewVersion: approvedPosts.some((post) => post.type === 'NPC' && post.originalNpcId === npc.id && post.createdAt > npc.createdAt)
+  }))
+  const charactersWithFlags = characters.map((character) => ({
+    ...character,
+    hasNewVersion: approvedPosts.some((post) => post.type === 'CHARACTER' && post.originalCharacterId === character.id && post.createdAt > character.createdAt)
+  }))
+
   return {
     profile,
     posts,
     profileComments,
-    systems,
-    npcs,
-    characters,
+    systems: systemsWithFlags,
+    npcs: npcsWithFlags,
+    characters: charactersWithFlags,
     profileLikes: {
       count: likesCount,
       likedByMe: Boolean(likedByMe)

@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { Dice5 } from 'lucide-vue-next'
+import type { FormulaVariable } from '../../shared/utils/characterRules'
 
 const props = defineProps<{
   roomId?: string
   characterId?: string | null
   isMaster?: boolean
+  variables?: FormulaVariable[]
 }>()
 
 const emit = defineEmits<{ rolled: [] }>()
@@ -37,7 +39,7 @@ async function roll() {
   <AppCard>
     <h3 class="mb-4 flex items-center gap-2 text-lg font-black text-white"><Dice5 class="h-5 w-5 text-ember" /> Rolagem</h3>
     <div class="space-y-3">
-      <input v-model="expression" class="input" placeholder="1d20, 1d12, 2d20+5">
+      <FormulaTextInput v-model="expression" :variables="props.variables || []" placeholder="1d20, 1d12, 2d20+5" />
       <div class="flex flex-wrap gap-2">
         <button v-for="preset in presets" :key="preset" type="button" class="rounded-md border border-white/10 px-2 py-1 text-xs font-bold text-mist hover:border-ember/40 hover:text-white" @click="expression = preset">
           {{ preset }}
